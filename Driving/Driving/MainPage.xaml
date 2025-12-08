@@ -6,26 +6,27 @@
 
     <Grid>
         <GraphicsView x:Name="GameCanvas"
-              HorizontalOptions="Fill"
-              VerticalOptions="Fill" 
-              Touch="GameCanvas_Touch"></GraphicsView>
+                      HorizontalOptions="Fill"
+                      VerticalOptions="Fill">
+            <GraphicsView.GestureRecognizers>
+                <SwipeGestureRecognizer Direction="Left" Swiped="OnSwiped" />
+                <SwipeGestureRecognizer Direction="Right" Swiped="OnSwiped" />
+            </GraphicsView.GestureRecognizers>
+        </GraphicsView>
 
-        <VerticalStackLayout x:Name="StartMenu" 
-                             VerticalOptions="Center" 
+        <VerticalStackLayout x:Name="StartMenu"
+                             VerticalOptions="Center"
                              HorizontalOptions="Center"
                              Spacing="20">
-            <Label Text="MAUI RACER" 
-                   TextColor="Cyan" 
-                   FontSize="40" 
-                   FontAttributes="Bold"
-                   HorizontalTextAlignment="Center"/>
-
-            <Button Text="Start Engine"
+            <Label Text="DRIVING"
+                   TextColor="Cyan"
+                   FontSize="40"
+                   FontAttributes="Bold" />
+            <Button Text="START"
                     Clicked="OnStartClicked"
                     BackgroundColor="Cyan"
                     TextColor="Black"
                     FontAttributes="Bold"/>
         </VerticalStackLayout>
     </Grid>
-
 </ContentPage>

@@ -1,39 +1,41 @@
-﻿using Driving.Models;
-using Microsoft.Maui.Graphics;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Microsoft.Maui.Graphics;
+using Driving.Models;
 
 namespace Driving.GameEngine;
 
 public class GameDrawable : IDrawable
 {
+    // Ошибка CS8618 решена, так как _gameState теперь всегда устанавливается в конструкторе
     private readonly GameState _gameState;
-    // ...
+
+    public GameDrawable(GameState state)
+    {
+        _gameState = state;
+    }
 
     public void Draw(ICanvas canvas, RectF dirtyRect)
     {
-        // 1. Обновление размеров и RoadMarkingOffset
         _gameState.ScreenWidth = dirtyRect.Width;
         _gameState.ScreenHeight = dirtyRect.Height;
 
-        // Увеличиваем смещение разметки, чтобы создать эффект движения
-        _gameState.RoadMarkingOffset += _gameState.Speed / 2f;
-        if (_gameState.RoadMarkingOffset > 60) // Период пунктира 30+30
+        // Обновление смещения разметки для анимации
+        if (_gameState.IsRunning)
         {
-            _gameState.RoadMarkingOffset -= 60;
+            _gameState.RoadMarkingOffset += _gameState.Speed / 2f;
+            if (_gameState.RoadMarkingOffset > 60)
+            {
+                _gameState.RoadMarkingOffset -= 60;
+            }
         }
 
-        // 2. Рисуем асфальт
+        // 1. Рисуем асфальт
         canvas.FillColor = Colors.DarkSlateGray;
         canvas.FillRectangle(dirtyRect);
 
-        // 3. Рисуем движущуюся разметку
+        // 2. Рисуем движущуюся разметку
         DrawRoadMarkings(canvas, dirtyRect);
 
-        // 4. Рисуем игрока
+        // 3. Рисуем машину игрока
         canvas.FillColor = Colors.LimeGreen;
 
         float playerX = _gameState.Player.CalculateX(dirtyRect.Width);
@@ -43,8 +45,10 @@ public class GameDrawable : IDrawable
                                     _gameState.Player.Width,
                                     _gameState.Player.Height, 5);
 
-        // 5. Рисуем счет
-        // ...
+        // 4. Рисуем счет
+        canvas.FontColor = Colors.White;
+        canvas.FontSize = 24;
+        canvas.DrawString($"Score: {_gameState.Score}", 20, 40, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
     }
 
     private void DrawRoadMarkings(ICanvas canvas, RectF dirtyRect)
@@ -55,13 +59,12 @@ public class GameDrawable : IDrawable
 
         float third = dirtyRect.Width / 3;
 
-        // Отрисовка левой и правой разделительных линий
+        // Цикл для отрисовки линий с учетом смещения
         for (int i = 0; i < dirtyRect.Height / 60 + 2; i++)
         {
             float y = (i * 60) + _gameState.RoadMarkingOffset;
 
-            // Если линия выходит за пределы, пропустить
-            if (y > dirtyRect.Height) continue;
+            if (y > dirtyRect.Height + 30) continue; // Оптимизация
 
             // Левая линия
             canvas.DrawLine(third, y, third, y - 30);
