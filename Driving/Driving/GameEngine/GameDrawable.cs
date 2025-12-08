@@ -5,7 +5,6 @@ namespace Driving.GameEngine;
 
 public class GameDrawable : IDrawable
 {
-    // Ошибка CS8618 решена, так как _gameState теперь всегда устанавливается в конструкторе
     private readonly GameState _gameState;
 
     public GameDrawable(GameState state)
@@ -18,16 +17,6 @@ public class GameDrawable : IDrawable
         _gameState.ScreenWidth = dirtyRect.Width;
         _gameState.ScreenHeight = dirtyRect.Height;
 
-        // Обновление смещения разметки для анимации
-        if (_gameState.IsRunning)
-        {
-            _gameState.RoadMarkingOffset += _gameState.Speed / 2f;
-            if (_gameState.RoadMarkingOffset > 60)
-            {
-                _gameState.RoadMarkingOffset -= 60;
-            }
-        }
-
         // 1. Рисуем асфальт
         canvas.FillColor = Colors.DarkSlateGray;
         canvas.FillRectangle(dirtyRect);
@@ -35,20 +24,39 @@ public class GameDrawable : IDrawable
         // 2. Рисуем движущуюся разметку
         DrawRoadMarkings(canvas, dirtyRect);
 
-        // 3. Рисуем машину игрока
-        canvas.FillColor = Colors.LimeGreen;
+        // ==========================================================
+        // 3. ИСПРАВЛЕННАЯ ЛОГИКА ОТРИСОВКИ ИГРОКА И МИГАНИЯ
+        // ==========================================================
 
-        float playerX = _gameState.Player.CalculateX(dirtyRect.Width);
-        float playerY = dirtyRect.Height - 150;
+        bool shouldDrawPlayer = true;
 
-        canvas.FillRoundedRectangle(playerX, playerY,
-                                    _gameState.Player.Width,
-                                    _gameState.Player.Height, 5);
+        if (_gameState.InvulnerabilityFrames > 0)
+        {
+            // Если в режиме неуязвимости, пропускаем каждый 4-й кадр, чтобы мигать
+            if (_gameState.InvulnerabilityFrames % 4 == 0)
+            {
+                shouldDrawPlayer = false;
+            }
+        }
 
-        // 4. Рисуем счет
-        canvas.FontColor = Colors.White;
-        canvas.FontSize = 24;
-        canvas.DrawString($"Score: {_gameState.Score}", 20, 40, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+        if (shouldDrawPlayer)
+        {
+            DrawPlayer(canvas);
+        }
+        // ==========================================================
+
+
+        // 4. Рисуем врагов
+        DrawEnemies(canvas);
+
+        // 5. Рисуем счет и жизни
+        DrawHud(canvas);
+
+        // 6. Надпись Game Over (если необходимо)
+        if (_gameState.IsGameOver)
+        {
+            DrawGameOver(canvas, dirtyRect);
+        }
     }
 
     private void DrawRoadMarkings(ICanvas canvas, RectF dirtyRect)
@@ -59,12 +67,11 @@ public class GameDrawable : IDrawable
 
         float third = dirtyRect.Width / 3;
 
-        // Цикл для отрисовки линий с учетом смещения
         for (int i = 0; i < dirtyRect.Height / 60 + 2; i++)
         {
             float y = (i * 60) + _gameState.RoadMarkingOffset;
 
-            if (y > dirtyRect.Height + 30) continue; // Оптимизация
+            if (y > dirtyRect.Height + 30) continue;
 
             // Левая линия
             canvas.DrawLine(third, y, third, y - 30);
@@ -72,5 +79,58 @@ public class GameDrawable : IDrawable
             // Правая линия
             canvas.DrawLine(third * 2, y, third * 2, y - 30);
         }
+    }
+
+    private void DrawPlayer(ICanvas canvas)
+    {
+        canvas.FillColor = Colors.LimeGreen;
+
+        float playerX = _gameState.Player.CalculateX(_gameState.ScreenWidth);
+        float playerY = _gameState.ScreenHeight - 150;
+
+        canvas.FillRoundedRectangle(playerX, playerY,
+                                    _gameState.Player.Width,
+                                    _gameState.Player.Height, 5);
+    }
+
+    private void DrawEnemies(ICanvas canvas)
+    {
+        canvas.FillColor = Colors.Red;
+
+        foreach (var enemy in _gameState.Enemies)
+        {
+            enemy.X = enemy.CalculateX(_gameState.ScreenWidth);
+
+            canvas.FillRoundedRectangle(enemy.X, enemy.Y, enemy.Width, enemy.Height, 5);
+        }
+    }
+
+    private void DrawHud(ICanvas canvas)
+    {
+        // 1. Счет
+        canvas.FontColor = Colors.White;
+        canvas.FontSize = 24;
+        canvas.DrawString($"Score: {_gameState.Score}", 20, 40, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+
+        // 2. Рекорд
+        int highScore = Preferences.Get("HighScore", 0);
+        canvas.DrawString($"High: {highScore}", 20, 70, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+
+        // 3. Жизни (сердечки)
+        canvas.FontColor = Colors.Red;
+        canvas.FontSize = 30;
+        float heartX = _gameState.ScreenWidth - 120;
+
+        for (int i = 0; i < _gameState.Lives; i++)
+        {
+            canvas.DrawString("❤️", heartX + (i * 30), 40, 30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
+        }
+    }
+
+    private void DrawGameOver(ICanvas canvas, RectF dirtyRect)
+    {
+        canvas.FontColor = Colors.Red;
+        canvas.FontSize = 48;
+        canvas.DrawString("CRASHED!", dirtyRect.Center.X - 150, dirtyRect.Center.Y - 50, 300, 100, HorizontalAlignment.Center, VerticalAlignment.Center);
     }
 }
