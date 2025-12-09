@@ -11,18 +11,13 @@ public partial class MainPage : ContentPage
     private readonly IDispatcherTimer _gameLoop;
     private readonly Random _random = new Random();
 
-    // Enum to define the type of collision
-    private enum CollisionResult
-    {
-        None,
-        SideCollision,    // Side, deducts a life
-        FrontalCollision  // Frontal, instant Game Over
-    }
+    // CONSTANTS for Collision
+    private enum CollisionResult { None, SideCollision, FrontalCollision }
+    private const float FrontalZoneDepth = 20f; // Top 20px of player car is instant death zone
 
-    // CONSTANT: The vertical distance (in pixels) from the player's front (top edge) 
-    // that counts as a "frontal" impact zone. 
-    // Player height is 100px. We use the top 20px as the frontal zone.
-    private const float FrontalZoneDepth = 20f;
+    // CONSTANTS for Animation
+    private const int LaneChangeDurationFrames = 10; // Animation duration in frames (~0.16s)
+    private const float LaneChangeForwardLeanY = 15f; // Max vertical shift (forward lean) during turn
 
     public MainPage()
     {
@@ -42,11 +37,16 @@ public partial class MainPage : ContentPage
         _gameState.IsRunning = true;
         _gameState.IsGameOver = false;
         _gameState.Score = 0;
-        _gameState.Lives = 3; // Start with 3 lives
-        _gameState.InvulnerabilityFrames = 0; // Reset invulnerability
+        _gameState.Lives = 3;
+        _gameState.InvulnerabilityFrames = 0;
 
         _gameState.Enemies.Clear();
+        _gameState.Collectibles.Clear();
         _gameState.EnemySpawnCounter = 0;
+        _gameState.CollectibleSpawnCounter = 0;
+
+        // Initialize player visual position on start
+        _gameState.Player.VisualY = _gameState.ScreenHeight - 150;
 
         StartMenu.IsVisible = false;
         _gameLoop.Start();
@@ -62,50 +62,66 @@ public partial class MainPage : ContentPage
             _gameState.InvulnerabilityFrames--;
         }
 
-        // 2. Road movement and score
+        // 2. Player Animation Logic
+        AnimatePlayerTurn();
+
+        // 3. Road movement and score
         _gameState.Score++;
         _gameState.RoadMarkingOffset += _gameState.Speed / 2f;
         if (_gameState.RoadMarkingOffset > 60) _gameState.RoadMarkingOffset -= 60;
 
-        // 3. Enemy movement, collision check, and removal
+        // 4. Enemy movement, collision check, and removal
         for (int i = _gameState.Enemies.Count - 1; i >= 0; i--)
         {
             var enemy = _gameState.Enemies[i];
             enemy.Y += _gameState.Speed;
 
-            // Check collision only if the player is NOT in invulnerability mode
             if (_gameState.InvulnerabilityFrames == 0)
             {
                 var collision = CheckCarCollision(enemy, _gameState.Player);
 
                 if (collision == CollisionResult.FrontalCollision)
                 {
-                    // FRONTAL COLLISION -> INSTANT GAME OVER
                     _gameState.IsGameOver = true;
                     StopGame();
                     return;
                 }
                 else if (collision == CollisionResult.SideCollision)
                 {
-                    // SIDE COLLISION
                     HandleLifeDeduction();
-                    // Activate invulnerability
                     _gameState.InvulnerabilityFrames = GameState.InvulnerabilityDuration;
 
-                    // Remove the enemy that was hit (optional, but makes sense for impact)
                     _gameState.Enemies.RemoveAt(i);
                     continue;
                 }
             }
 
-            // Remove enemy if it has left the bottom edge
             if (enemy.Y > _gameState.ScreenHeight)
             {
                 _gameState.Enemies.RemoveAt(i);
             }
         }
 
-        // 4. Spawn logic
+        // 5. Collectible Movement and Pickup Check
+        for (int i = _gameState.Collectibles.Count - 1; i >= 0; i--)
+        {
+            var collectible = _gameState.Collectibles[i];
+
+            collectible.Y += _gameState.Speed;
+
+            if (CheckCollectibleCollision(collectible, _gameState.Player))
+            {
+                HandleCoinPickup(collectible, i);
+                continue;
+            }
+
+            if (collectible.Y > _gameState.ScreenHeight)
+            {
+                _gameState.Collectibles.RemoveAt(i);
+            }
+        }
+
+        // 6. Spawn logic
         _gameState.EnemySpawnCounter++;
         if (_gameState.EnemySpawnCounter >= GameState.EnemySpawnRate)
         {
@@ -113,19 +129,63 @@ public partial class MainPage : ContentPage
             _gameState.EnemySpawnCounter = 0;
         }
 
+        _gameState.CollectibleSpawnCounter++;
+        if (_gameState.CollectibleSpawnCounter >= GameState.CollectibleSpawnRate)
+        {
+            SpawnNewCollectible();
+            _gameState.CollectibleSpawnCounter = 0;
+        }
+
         GameCanvas.Invalidate();
     }
 
+    private void AnimatePlayerTurn()
+    {
+        if (!_gameState.Player.IsAnimating)
+        {
+            // If not animating, ensure the VisualX is the target lane X
+            _gameState.Player.VisualX = _gameState.Player.CalculateLaneX(_gameState.ScreenWidth);
+            _gameState.Player.VisualY = _gameState.ScreenHeight - 150;
+            return;
+        }
+
+        int total = _gameState.Player.AnimationFramesTotal;
+        int remaining = _gameState.Player.AnimationFramesRemaining;
+
+        float linearProgress = 1f - ((float)remaining / total); // Linear progress (0.0 to 1.0)
+
+        // 1. Calculate Eased Progress (EaseInOut Sine)
+        // This makes the animation start slow, speed up in the middle, and slow down at the end.
+        float easedProgress = 0.5f - 0.5f * (float)Math.Cos(linearProgress * Math.PI);
+
+        // 2. Interpolate X position using Eased Progress
+        _gameState.Player.VisualX = _gameState.Player.StartX + (_gameState.Player.TargetX - _gameState.Player.StartX) * easedProgress;
+
+        // 3. Calculate Y position (Forward Lean using a parabolic curve)
+        // The lean factor still relies on the linear progress to peak in the middle of the transition.
+        float leanFactor = 4 * linearProgress * (1 - linearProgress); // Factor goes from 0 to 1 back to 0
+
+        float baseY = _gameState.ScreenHeight - 150;
+        _gameState.Player.VisualY = baseY - (LaneChangeForwardLeanY * leanFactor);
+
+        // 4. Decrement timer
+        _gameState.Player.AnimationFramesRemaining--;
+
+        if (_gameState.Player.AnimationFramesRemaining <= 0)
+        {
+            // Animation finished. Snap to final position.
+            _gameState.Player.IsAnimating = false;
+            _gameState.Player.VisualX = _gameState.Player.TargetX;
+            _gameState.Player.VisualY = baseY;
+        }
+    }
     private CollisionResult CheckCarCollision(Enemy enemy, Player player)
     {
-        // Player Y position (fixed top edge)
         float playerY = _gameState.ScreenHeight - 150;
-        float playerX = player.CalculateX(_gameState.ScreenWidth);
-
-        // Enemy X position (calculated based on lane)
+        float playerX = player.CalculateLaneX(_gameState.ScreenWidth); // Using fixed lane X for collision checks
         enemy.X = enemy.CalculateX(_gameState.ScreenWidth);
 
-        // AABB check (Axis-Aligned Bounding Box)
+        // AABB check 
         bool collisionX = playerX < enemy.X + enemy.Width &&
                           playerX + player.Width > enemy.X;
         bool collisionY = playerY < enemy.Y + enemy.Height &&
@@ -133,25 +193,38 @@ public partial class MainPage : ContentPage
 
         if (collisionX && collisionY)
         {
-            // Enemy's bottom edge (the impact point)
             float impactY = enemy.Y + enemy.Height;
-
-            // Player's frontal zone (top FrontalZoneDepth pixels)
             float playerFrontalLimit = playerY + FrontalZoneDepth;
 
-            // 1. Check for FRONTAL collision:
-            // Is the enemy's bottom edge inside the player's frontal zone (top 20px)?
+            // FRONTAL collision: Enemy's bottom edge inside player's top 20px
             if (impactY > playerY && impactY < playerFrontalLimit)
             {
                 return CollisionResult.FrontalCollision;
             }
 
-            // 2. Otherwise, it's a SIDE collision:
-            // The enemy's bottom edge hit the side/rear part of the player's car.
+            // SIDE collision
             return CollisionResult.SideCollision;
         }
 
         return CollisionResult.None;
+    }
+
+    private bool CheckCollectibleCollision(Collectible collectible, Player player)
+    {
+        float collectibleX = collectible.CalculateX(_gameState.ScreenWidth);
+        float playerX = player.CalculateLaneX(_gameState.ScreenWidth); // Using fixed lane X for collision checks
+        float playerY = _gameState.ScreenHeight - 150;
+
+        collectible.X = collectibleX;
+
+        // AABB check
+        bool collisionX = playerX < collectible.X + collectible.Width &&
+                          playerX + player.Width > collectible.X;
+
+        bool collisionY = playerY < collectible.Y + collectible.Height &&
+                          playerY + player.Height > collectible.Y;
+
+        return collisionX && collisionY;
     }
 
     private void HandleLifeDeduction()
@@ -165,35 +238,35 @@ public partial class MainPage : ContentPage
         }
     }
 
-    // Handle swiping (for lane change and wall hit)
+    private void HandleCoinPickup(Collectible coin, int index)
+    {
+        _gameState.Score += 100;
+        _gameState.Collectibles.RemoveAt(index);
+    }
+
     private void OnSwiped(object sender, SwipedEventArgs e)
     {
-        if (!_gameState.IsRunning) return;
+        // Ignore input while animating
+        if (!_gameState.IsRunning || _gameState.Player.IsAnimating) return;
 
-        int newLane = _gameState.Player.CurrentLane;
+        int targetLane = _gameState.Player.CurrentLane;
         bool boundaryHit = false;
 
         switch (e.Direction)
         {
             case SwipeDirection.Left:
-                newLane = _gameState.Player.CurrentLane - 1;
-                if (newLane < 0)
-                {
-                    boundaryHit = true;
-                }
+                targetLane = _gameState.Player.CurrentLane - 1;
+                if (targetLane < 0) boundaryHit = true;
                 break;
             case SwipeDirection.Right:
-                newLane = _gameState.Player.CurrentLane + 1;
-                if (newLane > 2)
-                {
-                    boundaryHit = true;
-                }
+                targetLane = _gameState.Player.CurrentLane + 1;
+                if (targetLane > 2) boundaryHit = true;
                 break;
         }
 
         if (boundaryHit)
         {
-            // Wall Hit -> Side Collision (deduct a life)
+            // Wall Hit (Side Collision)
             if (_gameState.InvulnerabilityFrames == 0)
             {
                 HandleLifeDeduction();
@@ -202,8 +275,14 @@ public partial class MainPage : ContentPage
         }
         else
         {
-            // Successful lane change
-            _gameState.Player.CurrentLane = newLane;
+            // Successful Lane Change -> Start Animation
+            _gameState.Player.CurrentLane = targetLane;
+
+            _gameState.Player.StartX = _gameState.Player.VisualX;
+            _gameState.Player.TargetX = _gameState.Player.CalculateLaneX(_gameState.ScreenWidth);
+            _gameState.Player.IsAnimating = true;
+            _gameState.Player.AnimationFramesTotal = LaneChangeDurationFrames;
+            _gameState.Player.AnimationFramesRemaining = LaneChangeDurationFrames;
         }
 
         GameCanvas.Invalidate();
@@ -221,6 +300,19 @@ public partial class MainPage : ContentPage
         );
 
         _gameState.Enemies.Add(newEnemy);
+    }
+
+    private void SpawnNewCollectible()
+    {
+        int lane = _random.Next(0, 3);
+
+        var newCollectible = new Collectible(
+            width: 30f,
+            height: 30f,
+            lane: lane
+        );
+
+        _gameState.Collectibles.Add(newCollectible);
     }
 
     private void StopGame()

@@ -23,9 +23,9 @@ public class Enemy : GameEntity
         // Позиция X будет рассчитана в Spawner или GameDrawable
     }
 
-    /// <summary>
+
     /// Вычисляет X-координату врага на основе его полосы.
-    /// </summary>
+  
     public float CalculateX(float screenWidth)
     {
         if (screenWidth <= 0) return 0;
