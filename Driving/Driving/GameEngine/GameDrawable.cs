@@ -18,15 +18,13 @@ public class GameDrawable : IDrawable
         _gameState.ScreenWidth = dirtyRect.Width;
         _gameState.ScreenHeight = dirtyRect.Height;
 
-        // --- FIX: Ensure the player's starting position is set immediately after dimensions are known ---
-        // This runs only once when the game starts and VisualX is still at its default (0)
+        // FIX: Ensure the player's starting position is set after dimensions are known (run once)
         if (_gameState.IsRunning && _gameState.Player.VisualX == 0 && _gameState.ScreenWidth > 0)
         {
             _gameState.Player.VisualX = _gameState.Player.CalculateLaneX(_gameState.ScreenWidth);
             _gameState.Player.StartX = _gameState.Player.VisualX;
             _gameState.Player.VisualY = _gameState.ScreenHeight - 150;
         }
-        // -------------------------------------------------------------------------------------------------
 
         // 2. Draw the asphalt
         canvas.FillColor = Colors.DarkSlateGray;
@@ -181,10 +179,16 @@ public class GameDrawable : IDrawable
         // Score and High Score
         canvas.FontColor = Colors.White;
         canvas.FontSize = 24;
-        canvas.DrawString($"Score: {_gameState.Score}", 20, 40, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+
+        canvas.DrawString($"Очки: {_gameState.Score}", 20, 40, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
 
         int highScore = Preferences.Get("HighScore", 0);
-        canvas.DrawString($"High: {highScore}", 20, 70, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+        canvas.DrawString($"Рекорд: {highScore}", 20, 70, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+
+        // Coins Collected
+        canvas.FontColor = Colors.Gold;
+        canvas.FontSize = 24;
+        canvas.DrawString($"Монеты: {_gameState.CoinsCollected} 💰", 20, 100, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
 
         // Lives (hearts)
         canvas.FontColor = Colors.Red;

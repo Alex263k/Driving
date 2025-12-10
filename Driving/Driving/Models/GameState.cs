@@ -13,6 +13,8 @@ public class GameState
     public float Speed { get; set; } = 10f;
     public int Score { get; set; } = 0;
 
+    public int CoinsCollected { get; set; } = 0; // Coin counter
+
     public Player Player { get; set; } = new Player();
 
     // Enemy Properties

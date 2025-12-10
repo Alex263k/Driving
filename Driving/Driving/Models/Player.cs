@@ -20,7 +20,7 @@ public class Player : GameEntity
         Width = 60f;
         Height = 100f;
         CurrentLane = 1;
-        // VisualX and VisualY will be initialized in MainPage.xaml.cs
+        // VisualX and VisualY will be initialized in GameDrawable.cs
     }
 
     // Calculates the fixed X position based on the final lane

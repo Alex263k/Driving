@@ -2,10 +2,7 @@
 
 public class Collectible : GameEntity
 {
-    // Type 0: Coin (for now)
     public int Type { get; set; }
-
-    // Which lane the collectible is in (0, 1, or 2)
     public int Lane { get; set; }
 
     public Collectible(float width, float height, int lane)
@@ -14,7 +11,6 @@ public class Collectible : GameEntity
         Height = height;
         Lane = lane;
 
-        // Collectibles always appear beyond the top edge
         Y = -height;
     }
 

@@ -13,11 +13,11 @@ public partial class MainPage : ContentPage
 
     // CONSTANTS for Collision
     private enum CollisionResult { None, SideCollision, FrontalCollision }
-    private const float FrontalZoneDepth = 20f; // Top 20px of player car is instant death zone
+    private const float FrontalZoneDepth = 20f;
 
     // CONSTANTS for Animation
-    private const int LaneChangeDurationFrames = 10; // Animation duration in frames (~0.16s)
-    private const float LaneChangeForwardLeanY = 15f; // Max vertical shift (forward lean) during turn
+    private const int LaneChangeDurationFrames = 10;
+    private const float LaneChangeForwardLeanY = 15f;
 
     public MainPage()
     {
@@ -37,6 +37,7 @@ public partial class MainPage : ContentPage
         _gameState.IsRunning = true;
         _gameState.IsGameOver = false;
         _gameState.Score = 0;
+        _gameState.CoinsCollected = 0; // Reset coin counter
         _gameState.Lives = 3;
         _gameState.InvulnerabilityFrames = 0;
 
@@ -45,8 +46,8 @@ public partial class MainPage : ContentPage
         _gameState.EnemySpawnCounter = 0;
         _gameState.CollectibleSpawnCounter = 0;
 
-        // Initialize player visual position on start
-        _gameState.Player.VisualY = _gameState.ScreenHeight - 150;
+        // Player position reset is handled by GameDrawable.Draw on the first frame
+        _gameState.Player.VisualX = 0; // Force reset to trigger initial setup in Draw()
 
         StartMenu.IsVisible = false;
         _gameLoop.Start();
@@ -62,7 +63,7 @@ public partial class MainPage : ContentPage
             _gameState.InvulnerabilityFrames--;
         }
 
-        // 2. Player Animation Logic
+        // 2. Player Animation Logic (EaseInOut implementation)
         AnimatePlayerTurn();
 
         // 3. Road movement and score
@@ -143,27 +144,23 @@ public partial class MainPage : ContentPage
     {
         if (!_gameState.Player.IsAnimating)
         {
-            // If not animating, ensure the VisualX is the target lane X
-            _gameState.Player.VisualX = _gameState.Player.CalculateLaneX(_gameState.ScreenWidth);
-            _gameState.Player.VisualY = _gameState.ScreenHeight - 150;
+            // If not animating, rely on GameDrawable to keep VisualX/Y set to the correct lane
             return;
         }
 
         int total = _gameState.Player.AnimationFramesTotal;
         int remaining = _gameState.Player.AnimationFramesRemaining;
 
-        float linearProgress = 1f - ((float)remaining / total); // Linear progress (0.0 to 1.0)
+        float linearProgress = 1f - ((float)remaining / total);
 
         // 1. Calculate Eased Progress (EaseInOut Sine)
-        // This makes the animation start slow, speed up in the middle, and slow down at the end.
         float easedProgress = 0.5f - 0.5f * (float)Math.Cos(linearProgress * Math.PI);
 
         // 2. Interpolate X position using Eased Progress
         _gameState.Player.VisualX = _gameState.Player.StartX + (_gameState.Player.TargetX - _gameState.Player.StartX) * easedProgress;
 
         // 3. Calculate Y position (Forward Lean using a parabolic curve)
-        // The lean factor still relies on the linear progress to peak in the middle of the transition.
-        float leanFactor = 4 * linearProgress * (1 - linearProgress); // Factor goes from 0 to 1 back to 0
+        float leanFactor = 4 * linearProgress * (1 - linearProgress);
 
         float baseY = _gameState.ScreenHeight - 150;
         _gameState.Player.VisualY = baseY - (LaneChangeForwardLeanY * leanFactor);
@@ -179,10 +176,11 @@ public partial class MainPage : ContentPage
             _gameState.Player.VisualY = baseY;
         }
     }
+
     private CollisionResult CheckCarCollision(Enemy enemy, Player player)
     {
         float playerY = _gameState.ScreenHeight - 150;
-        float playerX = player.CalculateLaneX(_gameState.ScreenWidth); // Using fixed lane X for collision checks
+        float playerX = player.CalculateLaneX(_gameState.ScreenWidth);
         enemy.X = enemy.CalculateX(_gameState.ScreenWidth);
 
         // AABB check 
@@ -196,7 +194,7 @@ public partial class MainPage : ContentPage
             float impactY = enemy.Y + enemy.Height;
             float playerFrontalLimit = playerY + FrontalZoneDepth;
 
-            // FRONTAL collision: Enemy's bottom edge inside player's top 20px
+            // FRONTAL collision
             if (impactY > playerY && impactY < playerFrontalLimit)
             {
                 return CollisionResult.FrontalCollision;
@@ -212,7 +210,7 @@ public partial class MainPage : ContentPage
     private bool CheckCollectibleCollision(Collectible collectible, Player player)
     {
         float collectibleX = collectible.CalculateX(_gameState.ScreenWidth);
-        float playerX = player.CalculateLaneX(_gameState.ScreenWidth); // Using fixed lane X for collision checks
+        float playerX = player.CalculateLaneX(_gameState.ScreenWidth);
         float playerY = _gameState.ScreenHeight - 150;
 
         collectible.X = collectibleX;
@@ -240,6 +238,7 @@ public partial class MainPage : ContentPage
 
     private void HandleCoinPickup(Collectible coin, int index)
     {
+        _gameState.CoinsCollected++;
         _gameState.Score += 100;
         _gameState.Collectibles.RemoveAt(index);
     }
