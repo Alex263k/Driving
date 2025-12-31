@@ -4,28 +4,36 @@ namespace Driving.Models;
 
 public class Enemy : GameEntity
 {
-    // Идентификатор, чтобы потом рисовать разные модели/цвета
-    public int Type { get; set; }
+    // Identifier for drawing different models/colors
+    public enum EnemyType
+    {
+        RegularCar,     // Regular car
+        Truck,          // Truck (wider, slower)
+        Motorcycle,     // Motorcycle (faster, narrower)
+        Police          // Police car (chases player)
+    }
 
-    // Какую полосу занимает враг (0, 1 или 2)
+    public EnemyType Type { get; set; }
+
+    // Which lane the enemy occupies (0, 1, or 2)
     public int Lane { get; set; }
 
-    public Enemy(float width, float height, int lane, float initialSpeed)
+    public Enemy(float width, float height, int lane, float initialSpeed, EnemyType type = EnemyType.RegularCar)
     {
         Width = width;
         Height = height;
         Lane = lane;
         Speed = initialSpeed;
+        Type = type;
 
-        // Враги всегда появляются за пределами верхнего края
+        // Enemies always spawn above the top edge
         Y = -height;
-
-        // Позиция X будет рассчитана в Spawner или GameDrawable
     }
 
 
-    /// Вычисляет X-координату врага на основе его полосы.
-  
+    /// <summary>
+    /// Calculates the X-coordinate of the enemy based on its lane.
+    /// </summary>
     public float CalculateX(float screenWidth)
     {
         if (screenWidth <= 0) return 0;

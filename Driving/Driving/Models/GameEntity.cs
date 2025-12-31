@@ -2,14 +2,14 @@
 
 public class GameEntity
 {
-    // Позиция на холсте
+    // Position on canvas
     public float X { get; set; }
     public float Y { get; set; }
 
-    // Размеры объекта
+    // Object dimensions
     public float Width { get; set; }
     public float Height { get; set; }
 
-    // Скорость (для врагов и бустов)
+    // Speed (for enemies and bonuses)
     public float Speed { get; set; }
 }
