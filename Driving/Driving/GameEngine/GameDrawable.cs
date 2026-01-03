@@ -1,5 +1,7 @@
 ﻿using Microsoft.Maui.Graphics;
 using Driving.Models;
+using Microsoft.Maui.Storage;
+using System;
 
 namespace Driving.GameEngine;
 
@@ -8,7 +10,6 @@ public class GameDrawable : IDrawable
     private readonly GameState _gameState;
     private readonly StartPage.CarInfo _selectedCar;
 
-    // Constructor now accepts selected car
     public GameDrawable(GameState state, StartPage.CarInfo selectedCar)
     {
         _gameState = state;
@@ -69,6 +70,18 @@ public class GameDrawable : IDrawable
         {
             DrawGameOver(canvas, dirtyRect);
         }
+
+        // 10. Draw Fuel Indicator
+        DrawFuelIndicator(canvas);
+
+        // 11. Draw Fuel Cans
+        DrawFuelCans(canvas);
+
+        // 12. Draw Low Fuel Warning
+        if (_gameState.Player.CurrentFuel < 30 && !_gameState.IsGameOver)
+        {
+            DrawLowFuelWarning(canvas, dirtyRect);
+        }
     }
 
     private void DrawRoadMarkings(ICanvas canvas, RectF dirtyRect)
@@ -92,13 +105,11 @@ public class GameDrawable : IDrawable
 
     private void DrawPlayer(ICanvas canvas)
     {
-        // Use the animated visual coordinates
         float playerX = _gameState.Player.VisualX;
         float playerY = _gameState.Player.VisualY;
         float width = _gameState.Player.Width;
         float height = _gameState.Player.Height;
 
-        // Draw different car models based on selected car
         switch (_selectedCar.Name)
         {
             case "BASIC":
@@ -127,26 +138,21 @@ public class GameDrawable : IDrawable
 
     private void DrawBasicCar(ICanvas canvas, float x, float y, float width, float height)
     {
-        // 1. Shadow 
         canvas.FillColor = Colors.Black.WithAlpha(0.5f);
         canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 8);
 
-        // 2. Body (use selected car color)
         canvas.FillColor = _selectedCar.Color;
         canvas.FillRoundedRectangle(x, y, width, height, 8);
 
-        // 3. Windshield 
         canvas.FillColor = Colors.LightSkyBlue.WithAlpha(0.8f);
         float windshieldHeight = height * 0.25f;
         canvas.FillRoundedRectangle(x + 5, y + 5, width - 10, windshieldHeight, 4);
 
-        // 4. Headlights 
         canvas.FillColor = Colors.Yellow;
         float lightSize = 5f;
         canvas.FillCircle(x + lightSize, y + height - lightSize, lightSize);
         canvas.FillCircle(x + width - lightSize, y + height - lightSize, lightSize);
 
-        // 5. Taillights
         canvas.FillColor = Colors.DarkRed;
         canvas.FillCircle(x + lightSize, y + lightSize, lightSize);
         canvas.FillCircle(x + width - lightSize, y + lightSize, lightSize);
@@ -154,28 +160,22 @@ public class GameDrawable : IDrawable
 
     private void DrawSportsCar(ICanvas canvas, float x, float y, float width, float height)
     {
-        // 1. Shadow 
         canvas.FillColor = Colors.Black.WithAlpha(0.5f);
         canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 12);
 
-        // 2. Body (lower and wider)
         canvas.FillColor = _selectedCar.Color;
         float sportsHeight = height * 0.8f;
         canvas.FillRoundedRectangle(x, y + (height - sportsHeight), width, sportsHeight, 12);
 
-        // 3. Spoiler
         canvas.FillColor = Colors.Black;
         canvas.FillRoundedRectangle(x + width * 0.3f, y - 5, width * 0.4f, 10, 5);
 
-        // 4. Windows
         canvas.FillColor = Colors.DarkSlateBlue.WithAlpha(0.8f);
         canvas.FillRoundedRectangle(x + 8, y + 10, width - 16, height * 0.25f, 6);
 
-        // 5. Racing stripes
         canvas.FillColor = Colors.White;
         canvas.FillRectangle(x + width * 0.4f, y + (height - sportsHeight), width * 0.2f, sportsHeight);
 
-        // 6. Headlights (slim)
         canvas.FillColor = Colors.Yellow;
         canvas.FillRectangle(x + 3, y + height - 15, 8, 10);
         canvas.FillRectangle(x + width - 11, y + height - 15, 8, 10);
@@ -183,19 +183,15 @@ public class GameDrawable : IDrawable
 
     private void DrawPoliceCar(ICanvas canvas, float x, float y, float width, float height, bool isPlayer = false)
     {
-        // 1. Shadow 
         canvas.FillColor = Colors.Black.WithAlpha(0.5f);
         canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 8);
 
-        // 2. Body (Police colors)
         canvas.FillColor = Colors.Blue;
         canvas.FillRoundedRectangle(x, y, width, height, 8);
 
-        // 3. White stripe
         canvas.FillColor = Colors.White;
         canvas.FillRectangle(x, y + height * 0.4f, width, height * 0.2f);
 
-        // 4. Light bar (on top) - only for player's police car
         if (isPlayer)
         {
             canvas.FillColor = Colors.Red;
@@ -205,20 +201,18 @@ public class GameDrawable : IDrawable
             canvas.FillRectangle(x + width * 0.7f, y - 10, width * 0.1f, 12);
         }
 
-        // 5. Windshield
         float windshieldHeight = height * 0.25f;
         float windshieldY = y + height - windshieldHeight - 10;
         canvas.FillColor = Colors.LightSkyBlue.WithAlpha(0.8f);
         canvas.FillRoundedRectangle(x + 5, windshieldY, width - 10, windshieldHeight, 4);
 
-        // 6. Headlights
         canvas.FillColor = Colors.Yellow;
         float lightSize = 5f;
         float lightY = y + height - lightSize;
         canvas.FillCircle(x + lightSize, lightY, lightSize);
         canvas.FillCircle(x + width - lightSize, lightY, lightSize);
 
-        // 7. Police text
+        // Используем DrawString вместо DrawBoldText для текста
         canvas.FontColor = Colors.White;
         canvas.FontSize = 12;
         canvas.DrawString("POLICE", x + width * 0.35f, y + height * 0.45f, width * 0.3f, 15,
@@ -227,15 +221,12 @@ public class GameDrawable : IDrawable
 
     private void DrawTaxi(ICanvas canvas, float x, float y, float width, float height)
     {
-        // 1. Shadow 
         canvas.FillColor = Colors.Black.WithAlpha(0.5f);
         canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 8);
 
-        // 2. Body (Yellow taxi)
         canvas.FillColor = Colors.Yellow;
         canvas.FillRoundedRectangle(x, y, width, height, 8);
 
-        // 3. Checker pattern on roof
         canvas.FillColor = Colors.Black;
         float checkerSize = 8f;
         for (float cx = x + 10; cx < x + width - 10; cx += checkerSize * 2)
@@ -247,19 +238,17 @@ public class GameDrawable : IDrawable
             }
         }
 
-        // 4. Taxi sign on roof
         canvas.FillColor = Colors.Red;
         canvas.FillRectangle(x + width * 0.4f, y - 5, width * 0.2f, 8);
+
         canvas.FontColor = Colors.White;
         canvas.FontSize = 10;
         canvas.DrawString("TAXI", x + width * 0.4f, y - 5, width * 0.2f, 8,
             HorizontalAlignment.Center, VerticalAlignment.Center);
 
-        // 5. Windows
         canvas.FillColor = Colors.LightSkyBlue.WithAlpha(0.8f);
         canvas.FillRoundedRectangle(x + 5, y + 5, width - 10, height * 0.25f, 4);
 
-        // 6. Headlights
         canvas.FillColor = Colors.White;
         float lightSize = 5f;
         canvas.FillCircle(x + lightSize, y + height - lightSize, lightSize);
@@ -268,32 +257,26 @@ public class GameDrawable : IDrawable
 
     private void DrawRacingCar(ICanvas canvas, float x, float y, float width, float height)
     {
-        // 1. Shadow 
         canvas.FillColor = Colors.Black.WithAlpha(0.5f);
         canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 10);
 
-        // 2. Body (low profile)
         canvas.FillColor = _selectedCar.Color;
         float racingHeight = height * 0.7f;
         canvas.FillRoundedRectangle(x, y + (height - racingHeight), width, racingHeight, 10);
 
-        // 3. Air intake
         canvas.FillColor = Colors.Black;
         canvas.FillRectangle(x + width * 0.2f, y + (height - racingHeight) + 5, width * 0.6f, 15);
 
-        // 4. Sponsor decals
         canvas.FontColor = Colors.White;
         canvas.FontSize = 10;
         canvas.DrawString("RACING", x + width * 0.3f, y + height * 0.3f, width * 0.4f, 15,
             HorizontalAlignment.Center, VerticalAlignment.Center);
 
-        // 5. Number on door
         canvas.FontColor = Colors.Black;
         canvas.FontSize = 16;
         canvas.DrawString("01", x + width * 0.4f, y + height * 0.5f, width * 0.2f, 20,
             HorizontalAlignment.Center, VerticalAlignment.Center);
 
-        // 6. Exhaust pipes
         canvas.FillColor = Colors.DarkGray;
         canvas.FillRectangle(x + width * 0.15f, y + height - 8, 6, 10);
         canvas.FillRectangle(x + width * 0.85f - 6, y + height - 8, 6, 10);
@@ -301,34 +284,27 @@ public class GameDrawable : IDrawable
 
     private void DrawVIPCar(ICanvas canvas, float x, float y, float width, float height)
     {
-        // 1. Shadow with glow effect
         canvas.FillColor = Colors.Gold.WithAlpha(0.3f);
         canvas.FillRoundedRectangle(x + 3, y + 3, width + 4, height + 4, 10);
 
-        // 2. Main body (gold/chrome)
         canvas.FillColor = Colors.Gold;
         canvas.FillRoundedRectangle(x, y, width, height, 10);
 
-        // 3. Chrome trim
         canvas.StrokeColor = Colors.Silver;
         canvas.StrokeSize = 2;
         canvas.DrawRoundedRectangle(x + 3, y + 3, width - 6, height - 6, 8);
 
-        // 4. Tinted windows (dark)
         canvas.FillColor = Colors.DarkSlateBlue.WithAlpha(0.9f);
         canvas.FillRoundedRectangle(x + 8, y + 8, width - 16, height * 0.3f, 6);
 
-        // 5. Star emblem on hood
-        canvas.FillColor = Colors.White;
+        canvas.FontColor = Colors.White;
         canvas.FontSize = 20;
         canvas.DrawString("⭐", x + width * 0.45f, y + height * 0.6f, width * 0.1f, 20,
             HorizontalAlignment.Center, VerticalAlignment.Center);
 
-        // 6. Luxury grill
         canvas.FillColor = Colors.Silver;
         canvas.FillRectangle(x + width * 0.3f, y + height - 20, width * 0.4f, 10);
 
-        // 7. Jewel headlights
         canvas.FillColor = Colors.Cyan;
         canvas.FillCircle(x + 8, y + height - 15, 6);
         canvas.FillColor = Colors.Magenta;
@@ -353,7 +329,7 @@ public class GameDrawable : IDrawable
                     DrawMotorcycle(canvas, enemy);
                     break;
                 case Enemy.EnemyType.Police:
-                    DrawPoliceCar(canvas, enemy, false); // false = not player
+                    DrawEnemyPoliceCar(canvas, enemy);
                     break;
             }
         }
@@ -366,24 +342,18 @@ public class GameDrawable : IDrawable
         float windshieldHeight = height * 0.25f;
         float lightSize = 5f;
 
-        // 1. Body (Red)
         canvas.FillColor = Colors.Red;
         canvas.FillRoundedRectangle(enemy.X, enemy.Y, width, height, 8);
 
-        // 2. Windshield
         float windshieldY = enemy.Y + height - windshieldHeight - 10;
-
         canvas.FillColor = Colors.Gray;
         canvas.FillRoundedRectangle(enemy.X + 5, windshieldY, width - 10, windshieldHeight, 4);
 
-        // 3. Headlights
         canvas.FillColor = Colors.Yellow;
         float lightY = enemy.Y + height - lightSize;
-
         canvas.FillCircle(enemy.X + lightSize, lightY, lightSize);
         canvas.FillCircle(enemy.X + width - lightSize, lightY, lightSize);
 
-        // 4. Taillights
         canvas.FillColor = Colors.DarkRed;
         canvas.FillCircle(enemy.X + lightSize, enemy.Y + lightSize, lightSize);
         canvas.FillCircle(enemy.X + width - lightSize, enemy.Y + lightSize, lightSize);
@@ -394,19 +364,15 @@ public class GameDrawable : IDrawable
         float width = enemy.Width;
         float height = enemy.Height;
 
-        // 1. Cab (front part)
         canvas.FillColor = Colors.DarkBlue;
         canvas.FillRoundedRectangle(enemy.X, enemy.Y, width * 0.4f, height, 8);
 
-        // 2. Trailer (back part)
         canvas.FillColor = Colors.Blue;
         canvas.FillRectangle(enemy.X + width * 0.4f, enemy.Y, width * 0.6f, height);
 
-        // 3. Windows in cab
         canvas.FillColor = Colors.LightGray;
         canvas.FillRoundedRectangle(enemy.X + 5, enemy.Y + 5, width * 0.4f - 10, height * 0.3f, 4);
 
-        // 4. Wheels (bigger for truck)
         canvas.FillColor = Colors.Black;
         float wheelSize = 8f;
         canvas.FillCircle(enemy.X + width * 0.1f, enemy.Y + height - wheelSize / 2, wheelSize);
@@ -420,21 +386,17 @@ public class GameDrawable : IDrawable
         float width = enemy.Width;
         float height = enemy.Height;
 
-        // 1. Main body
         canvas.FillColor = Colors.DarkRed;
         canvas.FillRoundedRectangle(enemy.X, enemy.Y + height * 0.4f, width, height * 0.6f, 10);
 
-        // 2. Seat
         canvas.FillColor = Colors.Black;
         canvas.FillRoundedRectangle(enemy.X + width * 0.3f, enemy.Y + height * 0.3f, width * 0.4f, height * 0.2f, 5);
 
-        // 3. Wheels
         canvas.FillColor = Colors.Black;
         float wheelSize = 10f;
         canvas.FillCircle(enemy.X + width * 0.25f, enemy.Y + height - wheelSize / 2, wheelSize);
         canvas.FillCircle(enemy.X + width * 0.75f, enemy.Y + height - wheelSize / 2, wheelSize);
 
-        // 4. Handlebars
         canvas.StrokeColor = Colors.Black;
         canvas.StrokeSize = 3;
         float handlebarY = enemy.Y + height * 0.4f;
@@ -443,41 +405,32 @@ public class GameDrawable : IDrawable
         canvas.DrawLine(enemy.X + width * 0.5f, handlebarY - 15, enemy.X + width * 0.8f, handlebarY - 10);
     }
 
-    private void DrawPoliceCar(ICanvas canvas, Enemy enemy, bool isPlayer = false)
+    private void DrawEnemyPoliceCar(ICanvas canvas, Enemy enemy)
     {
         float width = enemy.Width;
         float height = enemy.Height;
         float windshieldHeight = height * 0.25f;
         float lightSize = 5f;
 
-        // 1. Body (Police colors)
         canvas.FillColor = Colors.Blue;
         canvas.FillRoundedRectangle(enemy.X, enemy.Y, width, height, 8);
 
-        // 2. White stripe
         canvas.FillColor = Colors.White;
         canvas.FillRectangle(enemy.X, enemy.Y + height * 0.4f, width, height * 0.2f);
 
-        // 3. Light bar (on top) - only for player's police car
-        if (isPlayer)
-        {
-            canvas.FillColor = Colors.Red;
-            canvas.FillRectangle(enemy.X + width * 0.3f, enemy.Y - 10, width * 0.4f, 12);
-            canvas.FillColor = Colors.Blue;
-            canvas.FillRectangle(enemy.X + width * 0.2f, enemy.Y - 10, width * 0.1f, 12);
-            canvas.FillRectangle(enemy.X + width * 0.7f, enemy.Y - 10, width * 0.1f, 12);
-        }
-
-        // 4. Windshield
         float windshieldY = enemy.Y + height - windshieldHeight - 10;
         canvas.FillColor = Colors.Gray;
         canvas.FillRoundedRectangle(enemy.X + 5, windshieldY, width - 10, windshieldHeight, 4);
 
-        // 5. Headlights
         canvas.FillColor = Colors.Yellow;
         float lightY = enemy.Y + height - lightSize;
         canvas.FillCircle(enemy.X + lightSize, lightY, lightSize);
         canvas.FillCircle(enemy.X + width - lightSize, lightY, lightSize);
+
+        canvas.FontColor = Colors.White;
+        canvas.FontSize = 12;
+        canvas.DrawString("POLICE", enemy.X + width * 0.35f, enemy.Y + height * 0.45f,
+                         width * 0.3f, 15, HorizontalAlignment.Center, VerticalAlignment.Center);
     }
 
     private void DrawCollectibles(ICanvas canvas)
@@ -494,14 +447,13 @@ public class GameDrawable : IDrawable
             float centerX = collectible.X + radius;
             float centerY = collectible.Y + radius;
 
-            // Draw a circle for the coin
             canvas.FillCircle(centerX, centerY, radius);
             canvas.DrawCircle(centerX, centerY, radius);
 
-            // Draw a "$" symbol in the middle
             canvas.FontColor = Colors.Black;
             canvas.FontSize = 20;
-            canvas.DrawString("$", collectible.X, collectible.Y, collectible.Width, collectible.Height, HorizontalAlignment.Center, VerticalAlignment.Center);
+            canvas.DrawString("$", collectible.X, collectible.Y, collectible.Width, collectible.Height,
+                HorizontalAlignment.Center, VerticalAlignment.Center);
         }
     }
 
@@ -524,7 +476,6 @@ public class GameDrawable : IDrawable
                     canvas.StrokeSize = 3;
                     canvas.DrawCircle(centerX, centerY, radius);
                     canvas.FillCircle(centerX, centerY, radius - 2);
-                    // Shield symbol
                     canvas.FontColor = Colors.Blue;
                     canvas.FontSize = 24;
                     canvas.DrawString("🛡️", bonus.X, bonus.Y, width, height,
@@ -537,7 +488,6 @@ public class GameDrawable : IDrawable
                     canvas.StrokeSize = 3;
                     canvas.DrawCircle(centerX, centerY, radius);
                     canvas.FillCircle(centerX, centerY, radius - 2);
-                    // Magnet symbol
                     canvas.FontColor = Colors.White;
                     canvas.FontSize = 24;
                     canvas.DrawString("🧲", bonus.X, bonus.Y, width, height,
@@ -550,7 +500,6 @@ public class GameDrawable : IDrawable
                     canvas.StrokeSize = 3;
                     canvas.DrawCircle(centerX, centerY, radius);
                     canvas.FillCircle(centerX, centerY, radius - 2);
-                    // Slow motion symbol
                     canvas.FontColor = Colors.Black;
                     canvas.FontSize = 24;
                     canvas.DrawString("🐌", bonus.X, bonus.Y, width, height,
@@ -563,7 +512,6 @@ public class GameDrawable : IDrawable
                     canvas.StrokeSize = 3;
                     canvas.DrawCircle(centerX, centerY, radius);
                     canvas.FillCircle(centerX, centerY, radius - 2);
-                    // Multiplier symbol
                     canvas.FontColor = Colors.White;
                     canvas.FontSize = 20;
                     canvas.DrawString("x2", bonus.X, bonus.Y, width, height,
@@ -576,7 +524,6 @@ public class GameDrawable : IDrawable
                     canvas.StrokeSize = 3;
                     canvas.DrawCircle(centerX, centerY, radius);
                     canvas.FillCircle(centerX, centerY, radius - 2);
-                    // Coin rain symbol
                     canvas.FontColor = Colors.Black;
                     canvas.FontSize = 24;
                     canvas.DrawString("💰", bonus.X, bonus.Y, width, height,
@@ -591,21 +538,20 @@ public class GameDrawable : IDrawable
         // Score and High Score
         canvas.FontColor = Colors.White;
         canvas.FontSize = 24;
-
-        canvas.DrawString($"Score: {_gameState.Score}", 20, 40, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+        DrawBoldText(canvas, $"Score: {_gameState.Score}", 20, 40, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
 
         int highScore = Preferences.Get("HighScore", 0);
-        canvas.DrawString($"High Score: {highScore}", 20, 70, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+        DrawBoldText(canvas, $"High Score: {highScore}", 20, 70, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
 
         // Coins Collected
         canvas.FontColor = Colors.Gold;
         canvas.FontSize = 24;
-        canvas.DrawString($"Coins: {_gameState.CoinsCollected} 💰", 20, 100, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+        DrawBoldText(canvas, $"Coins: {_gameState.CoinsCollected} 💰", 20, 100, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
 
         // Current Car Indicator
         canvas.FontColor = _selectedCar.Color;
         canvas.FontSize = 16;
-        canvas.DrawString($"Car: {_selectedCar.Name}", 20, 130, 200, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
+        DrawBoldText(canvas, $"Car: {_selectedCar.Name}", 20, 130, 200, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
 
         // Lives (hearts)
         canvas.FontColor = Colors.Red;
@@ -614,7 +560,7 @@ public class GameDrawable : IDrawable
 
         for (int i = 0; i < _gameState.Lives; i++)
         {
-            canvas.DrawString("❤️", heartX + (i * 30), 40, 30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
+            DrawBoldText(canvas, "❤️", heartX + (i * 30), 40, 30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
         }
 
         // Active Bonuses Icons
@@ -626,7 +572,7 @@ public class GameDrawable : IDrawable
         {
             canvas.FontColor = Colors.Cyan;
             canvas.FontSize = 24;
-            canvas.DrawString("🛡️", bonusX + (activeBonusCount * 30), bonusY,
+            DrawBoldText(canvas, "🛡️", bonusX + (activeBonusCount * 30), bonusY,
                 30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
             activeBonusCount++;
         }
@@ -635,7 +581,7 @@ public class GameDrawable : IDrawable
         {
             canvas.FontColor = Colors.Red;
             canvas.FontSize = 24;
-            canvas.DrawString("🧲", bonusX + (activeBonusCount * 30), bonusY,
+            DrawBoldText(canvas, "🧲", bonusX + (activeBonusCount * 30), bonusY,
                 30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
             activeBonusCount++;
         }
@@ -644,7 +590,7 @@ public class GameDrawable : IDrawable
         {
             canvas.FontColor = Colors.Yellow;
             canvas.FontSize = 24;
-            canvas.DrawString("🐌", bonusX + (activeBonusCount * 30), bonusY,
+            DrawBoldText(canvas, "🐌", bonusX + (activeBonusCount * 30), bonusY,
                 30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
             activeBonusCount++;
         }
@@ -653,9 +599,90 @@ public class GameDrawable : IDrawable
         {
             canvas.FontColor = Colors.Green;
             canvas.FontSize = 24;
-            canvas.DrawString("x2", bonusX + (activeBonusCount * 30), bonusY,
+            DrawBoldText(canvas, "x2", bonusX + (activeBonusCount * 30), bonusY,
                 30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
             activeBonusCount++;
+        }
+    }
+
+    private void DrawFuelIndicator(ICanvas canvas)
+    {
+        float fuelBarX = _gameState.ScreenWidth - 220;
+        float fuelBarY = 40;
+        float fuelBarWidth = 200;
+        float fuelBarHeight = 20;
+
+        canvas.FillColor = Colors.DarkGray.WithAlpha(0.8f);
+        canvas.FillRoundedRectangle(fuelBarX, fuelBarY, fuelBarWidth, fuelBarHeight, 10);
+
+        float fuelPercentage = _gameState.Player.CurrentFuel / _gameState.Player.MaxFuel;
+        float fillWidth = fuelBarWidth * fuelPercentage;
+
+        if (fuelPercentage > 0.5f)
+            canvas.FillColor = Colors.LimeGreen;
+        else if (fuelPercentage > 0.2f)
+            canvas.FillColor = Colors.Orange;
+        else
+            canvas.FillColor = Colors.Red;
+
+        canvas.FillRoundedRectangle(fuelBarX, fuelBarY, fillWidth, fuelBarHeight, 10);
+
+        canvas.StrokeColor = Colors.White;
+        canvas.StrokeSize = 2;
+        canvas.DrawRoundedRectangle(fuelBarX, fuelBarY, fuelBarWidth, fuelBarHeight, 10);
+
+        canvas.FontColor = Colors.White;
+        canvas.FontSize = 12;
+        DrawBoldText(canvas, $"FUEL: {_gameState.Player.CurrentFuel:F0}/{_gameState.Player.MaxFuel:F0}",
+            fuelBarX, fuelBarY + fuelBarHeight + 5, fuelBarWidth, 20,
+            HorizontalAlignment.Center, VerticalAlignment.Top);
+    }
+
+    private void DrawFuelCans(ICanvas canvas)
+    {
+        canvas.FillColor = Colors.Red;
+        canvas.StrokeColor = Colors.DarkRed;
+        canvas.StrokeSize = 2;
+
+        foreach (var fuelCan in _gameState.FuelCans)
+        {
+            fuelCan.X = fuelCan.CalculateX(_gameState.ScreenWidth);
+
+            float width = fuelCan.Width;
+            float height = fuelCan.Height;
+
+            canvas.FillColor = Colors.Red;
+            canvas.FillRectangle(fuelCan.X, fuelCan.Y, width, height * 0.7f);
+
+            canvas.FillColor = Colors.DarkGray;
+            canvas.FillRoundedRectangle(fuelCan.X + width * 0.4f, fuelCan.Y - 5,
+                width * 0.2f, 10, 5);
+
+            canvas.FillColor = Colors.White;
+            canvas.FontSize = 16;
+            DrawBoldText(canvas, "⛽", fuelCan.X, fuelCan.Y, width, height,
+                HorizontalAlignment.Center, VerticalAlignment.Center);
+
+            if (_gameState.Player.CurrentFuel < 30)
+            {
+                canvas.StrokeColor = Colors.Yellow.WithAlpha(0.5f);
+                canvas.StrokeSize = 4;
+                canvas.DrawRectangle(fuelCan.X - 2, fuelCan.Y - 2,
+                    width + 4, height + 4);
+            }
+        }
+    }
+
+    private void DrawLowFuelWarning(ICanvas canvas, RectF dirtyRect)
+    {
+        if ((DateTime.Now.Millisecond / 500) % 2 == 0)
+        {
+            canvas.FontColor = Colors.Red;
+            canvas.FontSize = 24;
+
+            string warning = _gameState.Player.CurrentFuel < 10 ? "CRITICAL FUEL!" : "LOW FUEL!";
+            DrawBoldText(canvas, warning, dirtyRect.Center.X - 100, dirtyRect.Center.Y - 100,
+                200, 50, HorizontalAlignment.Center, VerticalAlignment.Center);
         }
     }
 
@@ -663,6 +690,19 @@ public class GameDrawable : IDrawable
     {
         canvas.FontColor = Colors.Red;
         canvas.FontSize = 48;
-        canvas.DrawString("CRASHED!", dirtyRect.Center.X - 150, dirtyRect.Center.Y - 50, 300, 100, HorizontalAlignment.Center, VerticalAlignment.Center);
+        DrawBoldText(canvas, "CRASHED!", dirtyRect.Center.X - 150, dirtyRect.Center.Y - 50,
+            300, 100, HorizontalAlignment.Center, VerticalAlignment.Center);
+    }
+
+    private void DrawBoldText(ICanvas canvas, string text, float x, float y, float width, float height,
+                              HorizontalAlignment hAlign = HorizontalAlignment.Left,
+                              VerticalAlignment vAlign = VerticalAlignment.Top)
+    {
+        // Используем текущие настройки шрифта (уже установлены перед вызовом)
+        canvas.DrawString(text, x - 0.5f, y, width, height, hAlign, vAlign);
+        canvas.DrawString(text, x + 0.5f, y, width, height, hAlign, vAlign);
+        canvas.DrawString(text, x, y - 0.5f, width, height, hAlign, vAlign);
+        canvas.DrawString(text, x, y + 0.5f, width, height, hAlign, vAlign);
+        canvas.DrawString(text, x, y, width, height, hAlign, vAlign);
     }
 }

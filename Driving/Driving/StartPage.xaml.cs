@@ -11,9 +11,9 @@ public partial class StartPage : ContentPage
     private const string SpeedLevelKey = "SpeedLevel";
 
     // Car class for storing car data
-    public class CarInfo
-    {
-        public string Name { get; set; } = string.Empty;
+        public class CarInfo
+        {
+            public string Name { get; set; } = string.Empty;
         public Color Color { get; set; } = Colors.LimeGreen;
         public string Emoji { get; set; } = "🚗";
     }

@@ -15,12 +15,21 @@ public class Player : GameEntity
     public float VisualX { get; set; } // Actual X position used by GameDrawable
     public float VisualY { get; set; } // Actual Y position used by GameDrawable (for forward lean)
 
+    // НОВОЕ: Топливная система
+    public float CurrentFuel { get; set; }
+    public float MaxFuel { get; set; }
+    public float FuelConsumptionRate { get; set; } = 0.1f; // Расход в секунду
+
     public Player()
     {
         Width = 60f;
         Height = 100f;
         CurrentLane = 1;
         // VisualX and VisualY will be initialized in GameDrawable.cs
+
+        // НОВОЕ: Инициализация топлива
+        MaxFuel = 100f; // Базовое значение
+        CurrentFuel = MaxFuel;
     }
 
     // Calculates the fixed X position based on the final lane

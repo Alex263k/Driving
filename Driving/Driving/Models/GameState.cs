@@ -56,4 +56,13 @@ public class GameState
     public int Lives { get; set; }
     public int InvulnerabilityFrames { get; set; } = 0;
     public const int InvulnerabilityDuration = 30;
+
+    // НОВОЕ: Топливные канистры
+    public List<FuelCan> FuelCans { get; set; } = new List<FuelCan>();
+    public int FuelCanSpawnCounter { get; set; } = 0;
+    public const int FuelCanSpawnRate = 200; // Реже, чем монеты
+
+    // НОВОЕ: Статистика топлива
+    public bool IsFuelDepleted { get; set; } = false;
+
 }

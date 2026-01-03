@@ -93,11 +93,24 @@ public partial class GamePage : ContentPage
         _gameState.Player.AnimationFramesRemaining = 0;
 
         _gameLoop.Start();
+
+        // НОВОЕ: Применение улучшений топлива
+        ApplyFuelUpgrades();
     }
 
     private void GameLoop_Tick(object? sender, EventArgs e)
     {
         if (!_gameState.IsRunning || _gameState.IsGameOver) return;
+
+        // 1a. Проверка топлива
+        UpdateFuelSystem();
+
+        // Если топливо закончилось
+        if (_gameState.IsFuelDepleted)
+        {
+            EndGame("OUT OF FUEL!");
+            return;
+        }
 
         // 1. Process player animations (lane switching)
         UpdatePlayerAnimation();
@@ -121,6 +134,21 @@ public partial class GamePage : ContentPage
         // 6. Force redraw of the game scene
         GameCanvas.Invalidate();
     }
+
+    private void ApplyFuelUpgrades()
+    {
+        // Уровень бака
+        int tankLevel = Preferences.Get("FuelTankLevel", 1);
+        _gameState.Player.MaxFuel = 100f + (tankLevel - 1) * 25f; // +25 за уровень
+        _gameState.Player.CurrentFuel = _gameState.Player.MaxFuel;
+
+        // Эффективность двигателя
+        int engineLevel = Preferences.Get("EngineEfficiencyLevel", 1);
+        _gameState.Player.FuelConsumptionRate = 0.1f * (1f - (engineLevel - 1) * 0.1f); // -10% за уровень
+        if (_gameState.Player.FuelConsumptionRate < 0.05f)
+            _gameState.Player.FuelConsumptionRate = 0.05f; // Минимальный расход
+    }
+
 
     private void UpdateActiveBonuses()
     {
@@ -293,6 +321,9 @@ public partial class GamePage : ContentPage
             {
                 _gameState.Enemies.RemoveAt(i);
             }
+
+            // 5. Spawn and update fuel cans
+            UpdateFuelSystem(); // Будет вызываться отсюда, а не из GameLoop_Tick
         }
 
         // Process all coins - move, check collection, remove if collected or off-screen
@@ -300,33 +331,20 @@ public partial class GamePage : ContentPage
         {
             var coin = _gameState.Collectibles[i];
 
-            // Magnet effect: coins move toward player
+            // Magnet effect: automatically collect ALL coins on screen
             if (_gameState.IsMagnetActive)
             {
-                float playerCenterX = _gameState.Player.VisualX + (_gameState.Player.Width / 2);
-                float coinCenterX = coin.CalculateX(_gameState.ScreenWidth) + (coin.Width / 2);
-
-                // Move coin toward player horizontally
-                // Note: We can't modify the X directly because it's calculated by CalculateX.
-                // We'll adjust the lane instead for simplicity, but this might not be perfect.
-                // For a better effect, we could add a property to Collectible for horizontal offset.
-                // For now, we'll just move the coin faster towards the player's lane.
-                // This is a simplified implementation.
-                if (coinCenterX < playerCenterX - 10)
-                {
-                    // Move coin right
-                    // We can't change the lane, so we'll skip this for now.
-                    // Alternatively, we can change the lane property and recalculate X.
-                }
-                else if (coinCenterX > playerCenterX + 10)
-                {
-                    // Move coin left
-                }
+                // Just collect the coin immediately - no movement needed
+                _gameState.CoinsCollected++;
+                _gameState.Score += 50;
+                _gameState.Collectibles.RemoveAt(i);
+                continue; // Skip normal processing for this coin
             }
 
-            coin.Y += _gameState.Speed; // Move coin down the screen
+            // Normal movement (only if magnet is not active)
+            coin.Y += _gameState.Speed;
 
-            // Check if player collected the coin
+            // Check if player collected the coin (normal collision)
             if (CheckCoinCollection(coin, _gameState.Player))
             {
                 _gameState.CoinsCollected++;
@@ -580,5 +598,84 @@ public partial class GamePage : ContentPage
     {
         int speedLevel = Preferences.Get("SpeedLevel", 1);
         return 1.0f + (speedLevel - 1) * 0.1f; // +10% for each level
+    }
+
+    private void UpdateFuelSystem()
+    {
+        // Расход топлива (зависит от скорости)
+        float fuelConsumed = _gameState.Player.FuelConsumptionRate *
+                            (_gameState.Speed / 10f) * // Чем быстрее, тем больше расход
+                            (16f / 1000f); // Корректировка на время кадра
+
+        _gameState.Player.CurrentFuel -= fuelConsumed;
+
+        // Проверка на истощение
+        if (_gameState.Player.CurrentFuel <= 0)
+        {
+            _gameState.Player.CurrentFuel = 0;
+            _gameState.IsFuelDepleted = true;
+            return;
+        }
+
+        // Спавн канистр с топливом
+        if (++_gameState.FuelCanSpawnCounter >= GameState.FuelCanSpawnRate)
+        {
+            // Спавним только если у игрока мало топлива
+            if (_gameState.Player.CurrentFuel < _gameState.Player.MaxFuel * 0.5f)
+            {
+                int lane = _random.Next(0, 3);
+                _gameState.FuelCans.Add(new FuelCan(40, 60, lane));
+            }
+            _gameState.FuelCanSpawnCounter = 0;
+        }
+
+        // Обновление канистр
+        for (int i = _gameState.FuelCans.Count - 1; i >= 0; i--)
+        {
+            var fuelCan = _gameState.FuelCans[i];
+            fuelCan.Y += _gameState.Speed;
+
+            // Проверка сбора
+            if (CheckFuelCanCollection(fuelCan, _gameState.Player))
+            {
+                CollectFuelCan(fuelCan);
+                _gameState.FuelCans.RemoveAt(i);
+                continue;
+            }
+
+            // Удаление за пределами экрана
+            if (fuelCan.Y > _gameState.ScreenHeight)
+            {
+                _gameState.FuelCans.RemoveAt(i);
+            }
+        }
+    }
+
+    private bool CheckFuelCanCollection(FuelCan fuelCan, Player player)
+    {
+        float pY = _gameState.Player.VisualY;
+        float pX = _gameState.Player.VisualX;
+        float canX = fuelCan.CalculateX(_gameState.ScreenWidth);
+
+        bool collisionX = pX < canX + fuelCan.Width && pX + player.Width > canX;
+        bool collisionY = pY < fuelCan.Y + fuelCan.Height && pY + player.Height > fuelCan.Y;
+
+        return collisionX && collisionY;
+    }
+
+    private void CollectFuelCan(FuelCan fuelCan)
+    {
+        float oldFuel = _gameState.Player.CurrentFuel;
+        _gameState.Player.CurrentFuel += fuelCan.FuelAmount;
+
+        // Не превышаем максимум
+        if (_gameState.Player.CurrentFuel > _gameState.Player.MaxFuel)
+            _gameState.Player.CurrentFuel = _gameState.Player.MaxFuel;
+
+        // Бонусные очки
+        float fuelCollected = _gameState.Player.CurrentFuel - oldFuel;
+        _gameState.Score += (int)(fuelCollected * 5);
+
+        // Эффект (можно добавить звук или анимацию)
     }
 }
