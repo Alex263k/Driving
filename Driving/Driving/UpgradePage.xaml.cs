@@ -1,4 +1,6 @@
-﻿namespace Driving;
+﻿using Microsoft.Maui.Controls;
+
+namespace Driving;
 
 public partial class UpgradePage : ContentPage
 {
@@ -69,7 +71,7 @@ public partial class UpgradePage : ContentPage
         _fuelTankLevel = Preferences.Get(FuelTankLevelKey, 1);
         _engineEfficiencyLevel = Preferences.Get(EngineEfficiencyLevelKey, 1);
 
-        // Ограничиваем уровни
+        // Limit levels
         _durabilityLevel = Math.Clamp(_durabilityLevel, 1, MaxUpgradeLevel);
         _speedLevel = Math.Clamp(_speedLevel, 1, MaxUpgradeLevel);
         _fuelTankLevel = Math.Clamp(_fuelTankLevel, 1, MaxUpgradeLevel);
@@ -88,7 +90,7 @@ public partial class UpgradePage : ContentPage
 
     private void UpdateUpgradeBars()
     {
-        // Обновляем прочность
+        // Update durability
         for (int i = 0; i < MaxUpgradeLevel; i++)
         {
             _durabilitySegments[i].Color = i < _durabilityLevel ?
@@ -96,7 +98,7 @@ public partial class UpgradePage : ContentPage
                 Color.FromArgb("#4b5563");
         }
 
-        // Обновляем скорость
+        // Update speed
         for (int i = 0; i < MaxUpgradeLevel; i++)
         {
             _speedSegments[i].Color = i < _speedLevel ?
@@ -104,7 +106,7 @@ public partial class UpgradePage : ContentPage
                 Color.FromArgb("#4b5563");
         }
 
-        // Обновляем топливный бак
+        // Update fuel tank
         for (int i = 0; i < MaxUpgradeLevel; i++)
         {
             _fuelTankSegments[i].Color = i < _fuelTankLevel ?
@@ -112,7 +114,7 @@ public partial class UpgradePage : ContentPage
                 Color.FromArgb("#4b5563");
         }
 
-        // Обновляем эффективность двигателя
+        // Update engine efficiency
         for (int i = 0; i < MaxUpgradeLevel; i++)
         {
             _engineSegments[i].Color = i < _engineEfficiencyLevel ?
@@ -120,94 +122,99 @@ public partial class UpgradePage : ContentPage
                 Color.FromArgb("#4b5563");
         }
 
-        // Обновляем текстовые метки
+        // Update text labels
         DurabilityLevelLabel.Text = $"{_durabilityLevel}/{MaxUpgradeLevel}";
         SpeedLevelLabel.Text = $"{_speedLevel}/{MaxUpgradeLevel}";
         FuelTankLevelLabel.Text = $"{_fuelTankLevel}/{MaxUpgradeLevel}";
         EngineLevelLabel.Text = $"{_engineEfficiencyLevel}/{MaxUpgradeLevel}";
 
-        DurabilityPriceLabel.Text = _durabilityLevel >= MaxUpgradeLevel ? "МАКС." : $"{GetDurabilityPrice(_durabilityLevel)} 🪙";
-        SpeedPriceLabel.Text = _speedLevel >= MaxUpgradeLevel ? "МАКС." : $"{GetSpeedPrice(_speedLevel)} 🪙";
-        FuelTankPriceLabel.Text = _fuelTankLevel >= MaxUpgradeLevel ? "МАКС." : $"{GetFuelTankPrice(_fuelTankLevel)} 🪙";
-        EnginePriceLabel.Text = _engineEfficiencyLevel >= MaxUpgradeLevel ? "МАКС." : $"{GetEngineEfficiencyPrice(_engineEfficiencyLevel)} 🪙";
+        DurabilityPriceLabel.Text = _durabilityLevel >= MaxUpgradeLevel ? "MAX" : $"{GetDurabilityPrice(_durabilityLevel)} 🪙";
+        SpeedPriceLabel.Text = _speedLevel >= MaxUpgradeLevel ? "MAX" : $"{GetSpeedPrice(_speedLevel)} 🪙";
+        FuelTankPriceLabel.Text = _fuelTankLevel >= MaxUpgradeLevel ? "MAX" : $"{GetFuelTankPrice(_fuelTankLevel)} 🪙";
+        EnginePriceLabel.Text = _engineEfficiencyLevel >= MaxUpgradeLevel ? "MAX" : $"{GetEngineEfficiencyPrice(_engineEfficiencyLevel)} 🪙";
     }
 
     private void UpdateFuelUpgradeInfo()
     {
-        // Расчет эффектов для топливной системы
-        float maxFuel = 100f + (_fuelTankLevel - 1) * 25f;
-        FuelTankEffectLabel.Text = $"Макс. топливо: {maxFuel}L";
+        // Fuel system effects with better bonuses
+        float maxFuel = 100f + (_fuelTankLevel - 1) * 35f; // Increased from 30f
+        FuelTankEffectLabel.Text = $"Max fuel: {maxFuel:F0}L";
 
-        float consumptionReduction = (_engineEfficiencyLevel - 1) * 10f;
-        EngineEffectLabel.Text = $"Расход топлива: -{consumptionReduction}%";
+        // Engine efficiency now reduces fuel consumption interval
+        float baseInterval = 0.333f; // Base: 3 times per second
+        float efficiencyBonus = (_engineEfficiencyLevel - 1) * 0.033f; // -0.033s per level
+
+        // Minimum interval 0.15 seconds (about 6.6 times per second)
+        float actualInterval = Math.Max(baseInterval - efficiencyBonus, 0.15f);
+        EngineEffectLabel.Text = $"Consumption: every {actualInterval:F2}s";
     }
 
     private void UpdateUpgradeButtons()
     {
         int playerCoins = Preferences.Get(TotalCoinsKey, 0);
 
-        // Кнопка прочности
+        // Durability button
         if (_durabilityLevel >= MaxUpgradeLevel)
         {
-            UpgradeDurabilityButton.Text = "МАКСИМАЛЬНЫЙ УРОВЕНЬ";
+            UpgradeDurabilityButton.Text = "MAX LEVEL";
             UpgradeDurabilityButton.BackgroundColor = Colors.Gray;
             UpgradeDurabilityButton.IsEnabled = false;
         }
         else
         {
             int durabilityPrice = GetDurabilityPrice(_durabilityLevel);
-            UpgradeDurabilityButton.Text = "УЛУЧШИТЬ";
+            UpgradeDurabilityButton.Text = "UPGRADE";
             UpgradeDurabilityButton.BackgroundColor = playerCoins >= durabilityPrice ?
                 Color.FromArgb("#10b981") :
                 Color.FromArgb("#6b7280");
             UpgradeDurabilityButton.IsEnabled = playerCoins >= durabilityPrice;
         }
 
-        // Кнопка скорости
+        // Speed button
         if (_speedLevel >= MaxUpgradeLevel)
         {
-            UpgradeSpeedButton.Text = "МАКСИМАЛЬНЫЙ УРОВЕНЬ";
+            UpgradeSpeedButton.Text = "MAX LEVEL";
             UpgradeSpeedButton.BackgroundColor = Colors.Gray;
             UpgradeSpeedButton.IsEnabled = false;
         }
         else
         {
             int speedPrice = GetSpeedPrice(_speedLevel);
-            UpgradeSpeedButton.Text = "УЛУЧШИТЬ";
+            UpgradeSpeedButton.Text = "UPGRADE";
             UpgradeSpeedButton.BackgroundColor = playerCoins >= speedPrice ?
                 Color.FromArgb("#10b981") :
                 Color.FromArgb("#6b7280");
             UpgradeSpeedButton.IsEnabled = playerCoins >= speedPrice;
         }
 
-        // Кнопка топливного бака
+        // Fuel tank button
         if (_fuelTankLevel >= MaxUpgradeLevel)
         {
-            FuelTankUpgradeButton.Text = "МАКСИМАЛЬНЫЙ УРОВЕНЬ";
+            FuelTankUpgradeButton.Text = "MAX LEVEL";
             FuelTankUpgradeButton.BackgroundColor = Colors.Gray;
             FuelTankUpgradeButton.IsEnabled = false;
         }
         else
         {
             int fuelTankPrice = GetFuelTankPrice(_fuelTankLevel);
-            FuelTankUpgradeButton.Text = "УЛУЧШИТЬ";
+            FuelTankUpgradeButton.Text = "UPGRADE";
             FuelTankUpgradeButton.BackgroundColor = playerCoins >= fuelTankPrice ?
                 Color.FromArgb("#3b82f6") :
                 Color.FromArgb("#6b7280");
             FuelTankUpgradeButton.IsEnabled = playerCoins >= fuelTankPrice;
         }
 
-        // Кнопка эффективности двигателя
+        // Engine efficiency button
         if (_engineEfficiencyLevel >= MaxUpgradeLevel)
         {
-            EngineUpgradeButton.Text = "МАКСИМАЛЬНЫЙ УРОВЕНЬ";
+            EngineUpgradeButton.Text = "MAX LEVEL";
             EngineUpgradeButton.BackgroundColor = Colors.Gray;
             EngineUpgradeButton.IsEnabled = false;
         }
         else
         {
             int enginePrice = GetEngineEfficiencyPrice(_engineEfficiencyLevel);
-            EngineUpgradeButton.Text = "УЛУЧШИТЬ";
+            EngineUpgradeButton.Text = "UPGRADE";
             EngineUpgradeButton.BackgroundColor = playerCoins >= enginePrice ?
                 Color.FromArgb("#3b82f6") :
                 Color.FromArgb("#6b7280");
@@ -257,15 +264,15 @@ public partial class UpgradePage : ContentPage
             await button.ScaleTo(0.9, 50, Easing.CubicInOut);
             await button.ScaleTo(1.0, 50, Easing.CubicInOut);
 
-            await DisplayAlert("Успех!",
-                $"Прочность улучшена до уровня {_durabilityLevel}!\n\nПотрачено: {upgradePrice} 🪙\nОсталось: {newCoins} 🪙",
-                "ОК");
+            await DisplayAlert("Success!",
+                $"Durability upgraded to level {_durabilityLevel}!\n\nSpent: {upgradePrice} 🪙\nRemaining: {newCoins} 🪙",
+                "OK");
         }
         else
         {
-            await DisplayAlert("Недостаточно монет",
-                $"Вам нужно {upgradePrice} 🪙 для улучшения.\n\nУ вас есть: {playerCoins} 🪙",
-                "ОК");
+            await DisplayAlert("Not enough coins",
+                $"You need {upgradePrice} 🪙 for upgrade.\n\nYou have: {playerCoins} 🪙",
+                "OK");
         }
     }
 
@@ -291,15 +298,15 @@ public partial class UpgradePage : ContentPage
             await button.ScaleTo(0.9, 50, Easing.CubicInOut);
             await button.ScaleTo(1.0, 50, Easing.CubicInOut);
 
-            await DisplayAlert("Успех!",
-                $"Скорость улучшена до уровня {_speedLevel}!\n\nПотрачено: {upgradePrice} 🪙\nОсталось: {newCoins} 🪙",
-                "ОК");
+            await DisplayAlert("Success!",
+                $"Speed upgraded to level {_speedLevel}!\n\nSpent: {upgradePrice} 🪙\nRemaining: {newCoins} 🪙",
+                "OK");
         }
         else
         {
-            await DisplayAlert("Недостаточно монет",
-                $"Вам нужно {upgradePrice} 🪙 для улучшения.\n\nУ вас есть: {playerCoins} 🪙",
-                "ОК");
+            await DisplayAlert("Not enough coins",
+                $"You need {upgradePrice} 🪙 for upgrade.\n\nYou have: {playerCoins} 🪙",
+                "OK");
         }
     }
 
@@ -326,15 +333,15 @@ public partial class UpgradePage : ContentPage
             await button.ScaleTo(0.9, 50, Easing.CubicInOut);
             await button.ScaleTo(1.0, 50, Easing.CubicInOut);
 
-            await DisplayAlert("Успех!",
-                $"Топливный бак улучшен до уровня {_fuelTankLevel}!\n\nПотрачено: {upgradePrice} 🪙\nОсталось: {newCoins} 🪙",
-                "ОК");
+            await DisplayAlert("Success!",
+                $"Fuel tank upgraded to level {_fuelTankLevel}!\n\nSpent: {upgradePrice} 🪙\nRemaining: {newCoins} 🪙",
+                "OK");
         }
         else
         {
-            await DisplayAlert("Недостаточно монет",
-                $"Вам нужно {upgradePrice} 🪙 для улучшения.\n\nУ вас есть: {playerCoins} 🪙",
-                "ОК");
+            await DisplayAlert("Not enough coins",
+                $"You need {upgradePrice} 🪙 for upgrade.\n\nYou have: {playerCoins} 🪙",
+                "OK");
         }
     }
 
@@ -361,15 +368,15 @@ public partial class UpgradePage : ContentPage
             await button.ScaleTo(0.9, 50, Easing.CubicInOut);
             await button.ScaleTo(1.0, 50, Easing.CubicInOut);
 
-            await DisplayAlert("Успех!",
-                $"Эффективность двигателя улучшена до уровня {_engineEfficiencyLevel}!\n\nПотрачено: {upgradePrice} 🪙\nОсталось: {newCoins} 🪙",
-                "ОК");
+            await DisplayAlert("Success!",
+                $"Engine efficiency upgraded to level {_engineEfficiencyLevel}!\n\nSpent: {upgradePrice} 🪙\nRemaining: {newCoins} 🪙",
+                "OK");
         }
         else
         {
-            await DisplayAlert("Недостаточно монет",
-                $"Вам нужно {upgradePrice} 🪙 для улучшения.\n\nУ вас есть: {playerCoins} 🪙",
-                "ОК");
+            await DisplayAlert("Not enough coins",
+                $"You need {upgradePrice} 🪙 for upgrade.\n\nYou have: {playerCoins} 🪙",
+                "OK");
         }
     }
 

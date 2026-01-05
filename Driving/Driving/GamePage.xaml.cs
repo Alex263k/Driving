@@ -19,6 +19,12 @@ public partial class GamePage : ContentPage
     private const int LaneChangeFrames = 10;
     private const float LeanAmountY = 15f;
 
+    // Speed settings for faster progression
+    private const float BaseSpeed = 14f; // Increased from 12f
+    private const float MaxSpeed = 45f; // Increased from 40f
+    private const int SpeedIncreaseInterval = 250; // Changed from 300 (faster increase)
+    private const float SpeedIncrement = 0.8f; // Increased from 0.7f
+
     // Constructor without parameters (for backward compatibility)
     public GamePage() : this(StartPage.GetSelectedCar())
     {
@@ -63,17 +69,20 @@ public partial class GamePage : ContentPage
         _gameState.Score = 0;
         _gameState.CoinsCollected = 0; // Reset coin counter
         _gameState.Lives = GetPlayerDurability(); // Use upgrade system
-        _gameState.Speed = 10f * GetPlayerSpeedMultiplier(); // Use upgrade system
+        _gameState.Speed = BaseSpeed * GetPlayerSpeedMultiplier(); // Use upgrade system
         _gameState.RoadMarkingOffset = 0;
         _gameState.InvulnerabilityFrames = 0;
+        _gameState.IsFuelDepleted = false;
 
         // Clear all entities
         _gameState.Enemies.Clear();
         _gameState.Collectibles.Clear();
         _gameState.Bonuses.Clear();
+        _gameState.FuelCans.Clear();
         _gameState.EnemySpawnCounter = 0;
         _gameState.CollectibleSpawnCounter = 0;
         _gameState.BonusSpawnCounter = 0;
+        _gameState.FuelCanSpawnCounter = 0;
 
         // Reset bonus effects
         _gameState.IsShieldActive = false;
@@ -94,7 +103,7 @@ public partial class GamePage : ContentPage
 
         _gameLoop.Start();
 
-        // НОВОЕ: Применение улучшений топлива
+        // Apply fuel upgrades
         ApplyFuelUpgrades();
     }
 
@@ -102,7 +111,10 @@ public partial class GamePage : ContentPage
     {
         if (!_gameState.IsRunning || _gameState.IsGameOver) return;
 
-        // 1a. Проверка топлива
+        // 1. Обновляем таймер топлива
+        _gameState.FuelTimer += 0.016f; // 16ms = 0.016s (60 FPS)
+
+        // 2. Проверяем топливную систему (теперь с таймером)
         UpdateFuelSystem();
 
         // Если топливо закончилось
@@ -112,43 +124,57 @@ public partial class GamePage : ContentPage
             return;
         }
 
-        // 1. Process player animations (lane switching)
+        // 1. Increase speed with score
+        UpdateGameSpeed();
+
+        // 2. Process player animations (lane switching)
         UpdatePlayerAnimation();
 
-        // 2. Move environment and update score (with multiplier)
-        int scoreIncrement = _gameState.ScoreMultiplier;
-        _gameState.Score += scoreIncrement;
+        // 3. Update score (with multiplier)
+        _gameState.Score += _gameState.ScoreMultiplier;
 
+        // 4. Move environment
         _gameState.RoadMarkingOffset += _gameState.Speed / 2f;
         if (_gameState.RoadMarkingOffset > 60) _gameState.RoadMarkingOffset -= 60;
 
-        // 3. Update active bonuses
+        // 5. Update active bonuses
         UpdateActiveBonuses();
 
-        // 4. Decrease invulnerability frames if active
+        // 6. Decrease invulnerability frames if active
         if (_gameState.InvulnerabilityFrames > 0) _gameState.InvulnerabilityFrames--;
 
-        // 5. Spawn and update all entities (enemies, coins, bonuses)
+        // 7. Spawn and update all entities (enemies, coins, bonuses)
         UpdateEntities();
 
-        // 6. Force redraw of the game scene
+        // 8. Force redraw of the game scene
         GameCanvas.Invalidate();
+    }
+
+    private void UpdateGameSpeed()
+    {
+        // Базовая скорость с улучшениями
+        float baseSpeed = BaseSpeed * GetPlayerSpeedMultiplier();
+
+        // Добавляем скорость за очки - теперь быстрее
+        float scoreBonus = Math.Min(_gameState.Score / SpeedIncreaseInterval, 40f) * SpeedIncrement;
+
+        // Итоговая скорость (растет быстрее)
+        _gameState.Speed = Math.Min(baseSpeed + scoreBonus, MaxSpeed);
     }
 
     private void ApplyFuelUpgrades()
     {
-        // Уровень бака
+        // Fuel tank level
         int tankLevel = Preferences.Get("FuelTankLevel", 1);
-        _gameState.Player.MaxFuel = 100f + (tankLevel - 1) * 25f; // +25 за уровень
+        _gameState.Player.MaxFuel = 100f + (tankLevel - 1) * 25f; // +25 per level
         _gameState.Player.CurrentFuel = _gameState.Player.MaxFuel;
 
-        // Эффективность двигателя
+        // Engine efficiency
         int engineLevel = Preferences.Get("EngineEfficiencyLevel", 1);
-        _gameState.Player.FuelConsumptionRate = 0.1f * (1f - (engineLevel - 1) * 0.1f); // -10% за уровень
+        _gameState.Player.FuelConsumptionRate = 0.1f * (1f - (engineLevel - 1) * 0.1f); // -10% per level
         if (_gameState.Player.FuelConsumptionRate < 0.05f)
-            _gameState.Player.FuelConsumptionRate = 0.05f; // Минимальный расход
+            _gameState.Player.FuelConsumptionRate = 0.05f; // Minimum consumption
     }
-
 
     private void UpdateActiveBonuses()
     {
@@ -321,9 +347,6 @@ public partial class GamePage : ContentPage
             {
                 _gameState.Enemies.RemoveAt(i);
             }
-
-            // 5. Spawn and update fuel cans
-            UpdateFuelSystem(); // Будет вызываться отсюда, а не из GameLoop_Tick
         }
 
         // Process all coins - move, check collection, remove if collected or off-screen
@@ -378,6 +401,74 @@ public partial class GamePage : ContentPage
             if (bonus.Y > _gameState.ScreenHeight)
             {
                 _gameState.Bonuses.RemoveAt(i);
+            }
+        }
+    }
+
+    private void UpdateFuelSystem()
+    {
+        // Update fuel timer (60 FPS = 0.016 seconds per frame)
+        _gameState.FuelTimer += 0.016f;
+
+        // Consume fuel every 0.333 seconds (3 times per second)
+        while (_gameState.FuelTimer >= GameState.FuelConsumptionInterval)
+        {
+            // Base fuel consumption: 1 unit per interval
+            _gameState.Player.CurrentFuel -= 1f;
+
+            // Additional consumption based on speed (more speed = more fuel)
+            float speedMultiplier = 1f + (_gameState.Speed / 12f) * 0.5f;
+            _gameState.Player.CurrentFuel -= (speedMultiplier - 1f);
+
+            _gameState.FuelTimer -= GameState.FuelConsumptionInterval;
+        }
+
+        // Check if fuel is depleted
+        if (_gameState.Player.CurrentFuel <= 0)
+        {
+            _gameState.Player.CurrentFuel = 0;
+            _gameState.IsFuelDepleted = true;
+            return;
+        }
+
+        // Spawn fuel cans - increased frequency
+        if (++_gameState.FuelCanSpawnCounter >= GameState.FuelCanSpawnRate)
+        {
+            float spawnChance = 0.5f; // Increased from 0.3f
+
+            if (_gameState.Player.CurrentFuel < _gameState.Player.MaxFuel * 0.4f)
+                spawnChance = 0.8f;
+
+            if (_gameState.Player.CurrentFuel < _gameState.Player.MaxFuel * 0.15f)
+                spawnChance = 0.95f;
+
+            if (_random.NextDouble() < spawnChance)
+            {
+                int lane = _random.Next(0, 3);
+                _gameState.FuelCans.Add(new FuelCan(40, 60, lane));
+            }
+
+            _gameState.FuelCanSpawnCounter = 0;
+        }
+
+        // Update existing fuel cans
+        for (int i = _gameState.FuelCans.Count - 1; i >= 0; i--)
+        {
+            var fuelCan = _gameState.FuelCans[i];
+            fuelCan.Y += _gameState.Speed;
+
+            // Check collection
+            if (CheckFuelCanCollection(fuelCan, _gameState.Player))
+            {
+                CollectFuelCan(fuelCan);
+                _gameState.FuelCans.RemoveAt(i);
+                continue;
+            }
+
+            // Remove if off screen
+            if (fuelCan.Y > _gameState.ScreenHeight)
+            {
+                _gameState.FuelCans.RemoveAt(i);
             }
         }
     }
@@ -507,6 +598,43 @@ public partial class GamePage : ContentPage
         return collisionX && collisionY;
     }
 
+    private bool CheckFuelCanCollection(FuelCan fuelCan, Player player)
+    {
+        float pY = _gameState.Player.VisualY;
+        float pX = _gameState.Player.VisualX;
+        float canX = fuelCan.CalculateX(_gameState.ScreenWidth);
+
+        bool collisionX = pX < canX + fuelCan.Width && pX + player.Width > canX;
+        bool collisionY = pY < fuelCan.Y + fuelCan.Height && pY + player.Height > fuelCan.Y;
+
+        return collisionX && collisionY;
+    }
+
+    private void CollectFuelCan(FuelCan fuelCan)
+    {
+        // Increased fuel amount to compensate for faster consumption
+        float fuelToAdd = 35f; // Increased from 30f
+
+        // Bonus from upgrades
+        int tankLevel = Preferences.Get("FuelTankLevel", 1);
+        float upgradeBonus = (tankLevel - 1) * 7f; // Increased from 5f
+
+        // Total fuel to add
+        float totalFuel = fuelToAdd + upgradeBonus;
+
+        // Add fuel
+        float oldFuel = _gameState.Player.CurrentFuel;
+        _gameState.Player.CurrentFuel += totalFuel;
+
+        // Don't exceed maximum
+        if (_gameState.Player.CurrentFuel > _gameState.Player.MaxFuel)
+            _gameState.Player.CurrentFuel = _gameState.Player.MaxFuel;
+
+        // Bonus points
+        float fuelCollected = _gameState.Player.CurrentFuel - oldFuel;
+        _gameState.Score += (int)(fuelCollected * 4); // Increased from 3
+    }
+
     private void ApplyBonus(Bonus.BonusType bonusType)
     {
         switch (bonusType)
@@ -598,84 +726,5 @@ public partial class GamePage : ContentPage
     {
         int speedLevel = Preferences.Get("SpeedLevel", 1);
         return 1.0f + (speedLevel - 1) * 0.1f; // +10% for each level
-    }
-
-    private void UpdateFuelSystem()
-    {
-        // Расход топлива (зависит от скорости)
-        float fuelConsumed = _gameState.Player.FuelConsumptionRate *
-                            (_gameState.Speed / 10f) * // Чем быстрее, тем больше расход
-                            (16f / 1000f); // Корректировка на время кадра
-
-        _gameState.Player.CurrentFuel -= fuelConsumed;
-
-        // Проверка на истощение
-        if (_gameState.Player.CurrentFuel <= 0)
-        {
-            _gameState.Player.CurrentFuel = 0;
-            _gameState.IsFuelDepleted = true;
-            return;
-        }
-
-        // Спавн канистр с топливом
-        if (++_gameState.FuelCanSpawnCounter >= GameState.FuelCanSpawnRate)
-        {
-            // Спавним только если у игрока мало топлива
-            if (_gameState.Player.CurrentFuel < _gameState.Player.MaxFuel * 0.5f)
-            {
-                int lane = _random.Next(0, 3);
-                _gameState.FuelCans.Add(new FuelCan(40, 60, lane));
-            }
-            _gameState.FuelCanSpawnCounter = 0;
-        }
-
-        // Обновление канистр
-        for (int i = _gameState.FuelCans.Count - 1; i >= 0; i--)
-        {
-            var fuelCan = _gameState.FuelCans[i];
-            fuelCan.Y += _gameState.Speed;
-
-            // Проверка сбора
-            if (CheckFuelCanCollection(fuelCan, _gameState.Player))
-            {
-                CollectFuelCan(fuelCan);
-                _gameState.FuelCans.RemoveAt(i);
-                continue;
-            }
-
-            // Удаление за пределами экрана
-            if (fuelCan.Y > _gameState.ScreenHeight)
-            {
-                _gameState.FuelCans.RemoveAt(i);
-            }
-        }
-    }
-
-    private bool CheckFuelCanCollection(FuelCan fuelCan, Player player)
-    {
-        float pY = _gameState.Player.VisualY;
-        float pX = _gameState.Player.VisualX;
-        float canX = fuelCan.CalculateX(_gameState.ScreenWidth);
-
-        bool collisionX = pX < canX + fuelCan.Width && pX + player.Width > canX;
-        bool collisionY = pY < fuelCan.Y + fuelCan.Height && pY + player.Height > fuelCan.Y;
-
-        return collisionX && collisionY;
-    }
-
-    private void CollectFuelCan(FuelCan fuelCan)
-    {
-        float oldFuel = _gameState.Player.CurrentFuel;
-        _gameState.Player.CurrentFuel += fuelCan.FuelAmount;
-
-        // Не превышаем максимум
-        if (_gameState.Player.CurrentFuel > _gameState.Player.MaxFuel)
-            _gameState.Player.CurrentFuel = _gameState.Player.MaxFuel;
-
-        // Бонусные очки
-        float fuelCollected = _gameState.Player.CurrentFuel - oldFuel;
-        _gameState.Score += (int)(fuelCollected * 5);
-
-        // Эффект (можно добавить звук или анимацию)
     }
 }

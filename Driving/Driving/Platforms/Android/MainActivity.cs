@@ -1,11 +1,31 @@
-﻿using Android.App;
-using Android.Content.PM;
+﻿using Android;
+using Android.App;
 using Android.OS;
+using AndroidX.Core.App;
+using AndroidX.Core.Content;
 
-namespace Driving
+[Activity(...)]
+public class MainActivity : MauiAppCompatActivity
 {
-    [Activity(Theme = "@style/Maui.SplashTheme", MainLauncher = true, LaunchMode = LaunchMode.SingleTop, ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
-    public class MainActivity : MauiAppCompatActivity
+    protected override void OnCreate(Bundle savedInstanceState)
     {
+        base.OnCreate(savedInstanceState);
+        RequestPermissions();
+    }
+
+    private void RequestPermissions()
+    {
+        var permissions = new List<string>();
+
+        if (ContextCompat.CheckSelfPermission(this, Manifest.Permission.ReadExternalStorage) != Permission.Granted)
+            permissions.Add(Manifest.Permission.ReadExternalStorage);
+
+        if (ContextCompat.CheckSelfPermission(this, Manifest.Permission.WriteExternalStorage) != Permission.Granted)
+            permissions.Add(Manifest.Permission.WriteExternalStorage);
+
+        if (permissions.Any())
+        {
+            ActivityCompat.RequestPermissions(this, permissions.ToArray(), 0);
+        }
     }
 }

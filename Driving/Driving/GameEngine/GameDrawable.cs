@@ -1,7 +1,13 @@
-﻿using Microsoft.Maui.Graphics;
-using Driving.Models;
+﻿using Driving.Models;
+using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Storage;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Threading.Tasks;
 
 namespace Driving.GameEngine;
 
@@ -9,20 +15,174 @@ public class GameDrawable : IDrawable
 {
     private readonly GameState _gameState;
     private readonly StartPage.CarInfo _selectedCar;
+    private readonly Dictionary<string, Microsoft.Maui.Graphics.IImage> _carImages = new();
+    private readonly Dictionary<string, RectF> _hudElements = new();
+    private bool _imagesLoaded = false;
+    private bool _loadingImages = false;
+    private Microsoft.Maui.Graphics.IImage? _customPlayerImage = null;
+    private bool _customImageLoaded = false;
+
+    // Size multipliers for different vehicle types (width, height)
+    private readonly Dictionary<Enemy.EnemyType, (float widthMultiplier, float heightMultiplier)> _enemySizeMultipliers = new()
+    {
+        { Enemy.EnemyType.RegularCar, (1.5f, 1.5f) },    // Normal car: 50% bigger
+        { Enemy.EnemyType.Truck, (1.5f, 2.0f) },         // Bus: 50% wider, 100% taller (longer)
+        { Enemy.EnemyType.Motorcycle, (1.3f, 1.5f) },    // Motorcycle: 30% wider, 50% taller
+        { Enemy.EnemyType.Police, (1.5f, 1.5f) }         // Police car: 50% bigger
+    };
+
+    // Size multiplier for player car
+    private const float PLAYER_SIZE_MULTIPLIER = 1.5f;
 
     public GameDrawable(GameState state, StartPage.CarInfo selectedCar)
     {
         _gameState = state;
         _selectedCar = selectedCar;
+
+        // Start loading images immediately
+        Task.Run(() => LoadCarImagesAsync());
+
+        // Load custom image if selected
+        if (selectedCar.Name == "CUSTOM" && !string.IsNullOrEmpty(selectedCar.CustomImagePath))
+        {
+            Task.Run(() => LoadCustomImageAsync(selectedCar.CustomImagePath));
+        }
+    }
+
+    private async Task LoadCustomImageAsync(string imagePath)
+    {
+        try
+        {
+            Debug.WriteLine($"=== LOADING CUSTOM SKIN ===");
+            Debug.WriteLine($"Path: {imagePath}");
+            Debug.WriteLine($"File exists: {File.Exists(imagePath)}");
+
+            if (File.Exists(imagePath))
+            {
+                using var stream = File.OpenRead(imagePath);
+                _customPlayerImage = Microsoft.Maui.Graphics.Platform.PlatformImage.FromStream(stream);
+                _customImageLoaded = true;
+                Debug.WriteLine($"✓ Custom skin loaded successfully");
+                Debug.WriteLine($"Image dimensions: {_customPlayerImage?.Width}x{_customPlayerImage?.Height}");
+            }
+            else
+            {
+                Debug.WriteLine($"✗ Custom skin file not found");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ERROR loading custom skin: {ex.Message}");
+            Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+            _customPlayerImage = null;
+        }
+    }
+
+    private async Task LoadCarImagesAsync()
+    {
+        if (_imagesLoaded || _loadingImages) return;
+        _loadingImages = true;
+
+        try
+        {
+            Debug.WriteLine("=== STARTING SPRITE LOADING ===");
+
+            var assembly = Assembly.GetExecutingAssembly();
+
+            // Log all available resources for debugging
+            var allResources = assembly.GetManifestResourceNames();
+            Debug.WriteLine($"Total resources found: {allResources.Length}");
+
+            var imagesToLoad = new Dictionary<string, string>
+            {
+                { "Blue", "blue.png" },
+                { "Bus", "bus.png" },
+                { "Green", "green.png" },
+                { "LightBlue", "lightblue.png" },
+                { "Police", "police.png" },
+                { "Taxi", "taxi.png" }
+            };
+
+            foreach (var imagePair in imagesToLoad)
+            {
+                await LoadImageAsync(assembly, imagePair.Key, imagePair.Value);
+            }
+
+            // Create enemy references
+            _carImages["EnemyBlue"] = _carImages["Blue"];
+            _carImages["EnemyBus"] = _carImages["Bus"];
+            _carImages["EnemyGreen"] = _carImages["Green"];
+            _carImages["EnemyLightBlue"] = _carImages["LightBlue"];
+            _carImages["EnemyPolice"] = _carImages["Police"];
+            _carImages["EnemyTaxi"] = _carImages["Taxi"];
+
+            _imagesLoaded = true;
+            Debug.WriteLine($"=== SPRITES LOADED ===");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ERROR loading sprites: {ex.Message}");
+        }
+        finally
+        {
+            _loadingImages = false;
+        }
+    }
+
+    private async Task LoadImageAsync(Assembly assembly, string key, string imageName)
+    {
+        try
+        {
+            Debug.WriteLine($"Loading: {key} from {imageName}");
+
+            // Resource paths to try
+            string[] possiblePaths =
+            {
+                $"Driving.Resources.Images.{imageName}",
+                $"{assembly.GetName().Name}.Resources.Images.{imageName}",
+                $"Resources.Images.{imageName}",
+                $"{imageName}"
+            };
+
+            foreach (var resourcePath in possiblePaths)
+            {
+                try
+                {
+                    using var stream = assembly.GetManifestResourceStream(resourcePath);
+                    if (stream != null)
+                    {
+                        var image = Microsoft.Maui.Graphics.Platform.PlatformImage.FromStream(stream);
+                        if (image != null)
+                        {
+                            _carImages[key] = image;
+                            Debug.WriteLine($"✓ Loaded: {key} from {resourcePath}");
+                            return;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"  Failed path {resourcePath}: {ex.Message}");
+                }
+            }
+
+            Debug.WriteLine($"✗ FAILED to load: {key}");
+            _carImages[key] = null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Critical error for {key}: {ex.Message}");
+            _carImages[key] = null;
+        }
     }
 
     public void Draw(ICanvas canvas, RectF dirtyRect)
     {
-        // 1. Always update screen dimensions first
+        // 1. Update screen dimensions
         _gameState.ScreenWidth = dirtyRect.Width;
         _gameState.ScreenHeight = dirtyRect.Height;
 
-        // FIX: Ensure the player's starting position is set after dimensions are known (run once)
+        // 2. Initialize player position
         if (_gameState.IsRunning && _gameState.Player.VisualX == 0 && _gameState.ScreenWidth > 0)
         {
             _gameState.Player.VisualX = _gameState.Player.CalculateLaneX(_gameState.ScreenWidth);
@@ -30,679 +190,652 @@ public class GameDrawable : IDrawable
             _gameState.Player.VisualY = _gameState.ScreenHeight - 150;
         }
 
-        // 2. Draw the asphalt
-        canvas.FillColor = Colors.DarkSlateGray;
-        canvas.FillRectangle(dirtyRect);
+        // Clear HUD elements
+        _hudElements.Clear();
 
-        // 3. Draw the moving road markings
+        // 3. Draw background
+        DrawBackground(canvas, dirtyRect);
+
+        // 4. Draw road markings
         DrawRoadMarkings(canvas, dirtyRect);
 
-        // 4. Draw the player car (using VisualX/Y for animation, and blinking logic)
-        bool shouldDrawPlayer = true;
+        // 5. Draw game entities (under player)
+        DrawGameEntities(canvas);
 
-        if (_gameState.InvulnerabilityFrames > 0)
-        {
-            if (_gameState.InvulnerabilityFrames % 4 == 0)
-            {
-                shouldDrawPlayer = false;
-            }
-        }
+        // 6. Draw player
+        DrawPlayer(canvas);
 
-        if (shouldDrawPlayer)
-        {
-            DrawPlayer(canvas);
-        }
-
-        // 5. Draw the enemies
-        DrawEnemies(canvas);
-
-        // 6. Draw Collectibles
-        DrawCollectibles(canvas);
-
-        // 7. Draw Bonuses
-        DrawBonuses(canvas);
-
-        // 8. Draw the HUD (Score and Lives)
+        // 7. Draw HUD
         DrawHud(canvas);
 
-        // 9. Draw Game Over text
-        if (_gameState.IsGameOver)
-        {
-            DrawGameOver(canvas, dirtyRect);
-        }
+        // 8. Draw game states
+        DrawGameStates(canvas, dirtyRect);
+    }
 
-        // 10. Draw Fuel Indicator
-        DrawFuelIndicator(canvas);
-
-        // 11. Draw Fuel Cans
-        DrawFuelCans(canvas);
-
-        // 12. Draw Low Fuel Warning
-        if (_gameState.Player.CurrentFuel < 30 && !_gameState.IsGameOver)
-        {
-            DrawLowFuelWarning(canvas, dirtyRect);
-        }
+    private void DrawBackground(ICanvas canvas, RectF dirtyRect)
+    {
+        // Simple color instead of gradient
+        canvas.FillColor = Color.FromArgb("#2F4F4F");
+        canvas.FillRectangle(dirtyRect);
     }
 
     private void DrawRoadMarkings(ICanvas canvas, RectF dirtyRect)
     {
-        canvas.StrokeColor = Colors.White;
-        canvas.StrokeSize = 4;
-        canvas.StrokeDashPattern = new float[] { 30, 30 };
+        // Create dashed lines manually
+        float dashLength = 20;
+        float gapLength = 20;
+        float totalLength = dashLength + gapLength;
 
-        float third = dirtyRect.Width / 3;
+        // Draw lane dividers
+        float laneWidth = dirtyRect.Width / 3f;
+        canvas.StrokeColor = Colors.White.WithAlpha(0.8f);
+        canvas.StrokeSize = 3;
 
-        for (int i = 0; i < dirtyRect.Height / 60 + 2; i++)
+        for (int i = 1; i < 3; i++)
         {
-            float y = (i * 60) + _gameState.RoadMarkingOffset;
+            float x = laneWidth * i;
 
-            if (y > dirtyRect.Height + 30) continue;
-
-            canvas.DrawLine(third, y, third, y - 30);
-            canvas.DrawLine(third * 2, y, third * 2, y - 30);
+            // Draw dashed line
+            for (float y = _gameState.RoadMarkingOffset; y < dirtyRect.Height; y += totalLength)
+            {
+                if (y + dashLength > 0)
+                {
+                    float startY = Math.Max(y, 0);
+                    float endY = Math.Min(y + dashLength, dirtyRect.Height);
+                    if (startY < endY)
+                    {
+                        canvas.DrawLine(x, startY, x, endY);
+                    }
+                }
+            }
         }
+
+        // Road edges
+        canvas.StrokeColor = Colors.Yellow;
+        canvas.StrokeSize = 2;
+
+        // Left edge
+        for (float y = _gameState.RoadMarkingOffset; y < dirtyRect.Height; y += totalLength)
+        {
+            if (y + dashLength > 0)
+            {
+                float startY = Math.Max(y, 0);
+                float endY = Math.Min(y + dashLength, dirtyRect.Height);
+                if (startY < endY)
+                {
+                    canvas.DrawLine(5, startY, 5, endY);
+                }
+            }
+        }
+
+        // Right edge
+        for (float y = _gameState.RoadMarkingOffset; y < dirtyRect.Height; y += totalLength)
+        {
+            if (y + dashLength > 0)
+            {
+                float startY = Math.Max(y, 0);
+                float endY = Math.Min(y + dashLength, dirtyRect.Height);
+                if (startY < endY)
+                {
+                    canvas.DrawLine(dirtyRect.Width - 5, startY, dirtyRect.Width - 5, endY);
+                }
+            }
+        }
+    }
+
+    private void DrawGameEntities(ICanvas canvas)
+    {
+        // Draw enemies
+        foreach (var enemy in _gameState.Enemies)
+        {
+            enemy.X = enemy.CalculateX(_gameState.ScreenWidth);
+            DrawEnemy(canvas, enemy);
+        }
+
+        // Draw collectibles
+        foreach (var collectible in _gameState.Collectibles)
+        {
+            collectible.X = collectible.CalculateX(_gameState.ScreenWidth);
+            DrawCollectible(canvas, collectible);
+        }
+
+        // Draw bonuses
+        foreach (var bonus in _gameState.Bonuses)
+        {
+            bonus.X = bonus.CalculateX(_gameState.ScreenWidth);
+            DrawBonus(canvas, bonus);
+        }
+
+        // Draw fuel cans
+        foreach (var fuelCan in _gameState.FuelCans)
+        {
+            fuelCan.X = fuelCan.CalculateX(_gameState.ScreenWidth);
+            DrawFuelCan(canvas, fuelCan);
+        }
+    }
+
+    private void DrawEnemy(ICanvas canvas, Enemy enemy)
+    {
+        float x = enemy.X;
+        float y = enemy.Y;
+        float width = enemy.Width;
+        float height = enemy.Height;
+
+        // Get size multipliers for this enemy type
+        var multipliers = _enemySizeMultipliers[enemy.Type];
+        float drawWidth = width * multipliers.widthMultiplier;
+        float drawHeight = height * multipliers.heightMultiplier;
+
+        // Try to draw sprite
+        string imageKey = GetEnemyImageKey(enemy.Type);
+
+        if (_carImages.TryGetValue(imageKey, out var image) && image != null)
+        {
+            try
+            {
+                // Save canvas state
+                canvas.SaveState();
+
+                // Move to center of enemy position
+                canvas.Translate(x + width / 2, y + height / 2);
+
+                // Rotate 180 degrees to face backwards
+                canvas.Rotate(180);
+
+                // Draw image centered at (0,0) with appropriate size
+                canvas.DrawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+
+                // Restore canvas state
+                canvas.RestoreState();
+                return;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error drawing enemy sprite {imageKey}: {ex.Message}");
+                // Fallback to colored rectangle
+            }
+        }
+
+        // Fallback: colored rectangle
+        DrawEnemyFallback(canvas, enemy, drawWidth, drawHeight);
+    }
+
+    private string GetEnemyImageKey(Enemy.EnemyType type)
+    {
+        return type switch
+        {
+            Enemy.EnemyType.RegularCar => "EnemyBlue",
+            Enemy.EnemyType.Truck => "EnemyBus",
+            Enemy.EnemyType.Motorcycle => "EnemyGreen",
+            Enemy.EnemyType.Police => "EnemyPolice",
+            _ => "EnemyBlue"
+        };
+    }
+
+    private void DrawEnemyFallback(ICanvas canvas, Enemy enemy, float drawWidth, float drawHeight)
+    {
+        float x = enemy.X;
+        float y = enemy.Y;
+        float width = enemy.Width;
+        float height = enemy.Height;
+
+        Color color = enemy.Type switch
+        {
+            Enemy.EnemyType.RegularCar => Colors.Red,
+            Enemy.EnemyType.Truck => Colors.DarkBlue,
+            Enemy.EnemyType.Motorcycle => Colors.DarkRed,
+            Enemy.EnemyType.Police => Colors.Blue,
+            _ => Colors.Red
+        };
+
+        // Save canvas state for rotation
+        canvas.SaveState();
+
+        // Move to center and rotate
+        canvas.Translate(x + width / 2, y + height / 2);
+        canvas.Rotate(180);
+
+        // Draw car shape centered at (0,0)
+        DrawCarShape(canvas, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight, color);
+
+        // Restore canvas state
+        canvas.RestoreState();
     }
 
     private void DrawPlayer(ICanvas canvas)
     {
-        float playerX = _gameState.Player.VisualX;
-        float playerY = _gameState.Player.VisualY;
+        if (!_gameState.IsRunning) return;
+
+        float x = _gameState.Player.VisualX;
+        float y = _gameState.Player.VisualY;
         float width = _gameState.Player.Width;
         float height = _gameState.Player.Height;
 
-        switch (_selectedCar.Name)
+        // Blink effect during invulnerability
+        if (_gameState.InvulnerabilityFrames > 0)
         {
-            case "BASIC":
-                DrawBasicCar(canvas, playerX, playerY, width, height);
-                break;
-            case "SPORTS":
-                DrawSportsCar(canvas, playerX, playerY, width, height);
-                break;
-            case "POLICE":
-                DrawPoliceCar(canvas, playerX, playerY, width, height, true);
-                break;
-            case "TAXI":
-                DrawTaxi(canvas, playerX, playerY, width, height);
-                break;
-            case "RACING":
-                DrawRacingCar(canvas, playerX, playerY, width, height);
-                break;
-            case "VIP":
-                DrawVIPCar(canvas, playerX, playerY, width, height);
-                break;
-            default:
-                DrawBasicCar(canvas, playerX, playerY, width, height);
-                break;
-        }
-    }
-
-    private void DrawBasicCar(ICanvas canvas, float x, float y, float width, float height)
-    {
-        canvas.FillColor = Colors.Black.WithAlpha(0.5f);
-        canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 8);
-
-        canvas.FillColor = _selectedCar.Color;
-        canvas.FillRoundedRectangle(x, y, width, height, 8);
-
-        canvas.FillColor = Colors.LightSkyBlue.WithAlpha(0.8f);
-        float windshieldHeight = height * 0.25f;
-        canvas.FillRoundedRectangle(x + 5, y + 5, width - 10, windshieldHeight, 4);
-
-        canvas.FillColor = Colors.Yellow;
-        float lightSize = 5f;
-        canvas.FillCircle(x + lightSize, y + height - lightSize, lightSize);
-        canvas.FillCircle(x + width - lightSize, y + height - lightSize, lightSize);
-
-        canvas.FillColor = Colors.DarkRed;
-        canvas.FillCircle(x + lightSize, y + lightSize, lightSize);
-        canvas.FillCircle(x + width - lightSize, y + lightSize, lightSize);
-    }
-
-    private void DrawSportsCar(ICanvas canvas, float x, float y, float width, float height)
-    {
-        canvas.FillColor = Colors.Black.WithAlpha(0.5f);
-        canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 12);
-
-        canvas.FillColor = _selectedCar.Color;
-        float sportsHeight = height * 0.8f;
-        canvas.FillRoundedRectangle(x, y + (height - sportsHeight), width, sportsHeight, 12);
-
-        canvas.FillColor = Colors.Black;
-        canvas.FillRoundedRectangle(x + width * 0.3f, y - 5, width * 0.4f, 10, 5);
-
-        canvas.FillColor = Colors.DarkSlateBlue.WithAlpha(0.8f);
-        canvas.FillRoundedRectangle(x + 8, y + 10, width - 16, height * 0.25f, 6);
-
-        canvas.FillColor = Colors.White;
-        canvas.FillRectangle(x + width * 0.4f, y + (height - sportsHeight), width * 0.2f, sportsHeight);
-
-        canvas.FillColor = Colors.Yellow;
-        canvas.FillRectangle(x + 3, y + height - 15, 8, 10);
-        canvas.FillRectangle(x + width - 11, y + height - 15, 8, 10);
-    }
-
-    private void DrawPoliceCar(ICanvas canvas, float x, float y, float width, float height, bool isPlayer = false)
-    {
-        canvas.FillColor = Colors.Black.WithAlpha(0.5f);
-        canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 8);
-
-        canvas.FillColor = Colors.Blue;
-        canvas.FillRoundedRectangle(x, y, width, height, 8);
-
-        canvas.FillColor = Colors.White;
-        canvas.FillRectangle(x, y + height * 0.4f, width, height * 0.2f);
-
-        if (isPlayer)
-        {
-            canvas.FillColor = Colors.Red;
-            canvas.FillRectangle(x + width * 0.3f, y - 10, width * 0.4f, 12);
-            canvas.FillColor = Colors.Blue;
-            canvas.FillRectangle(x + width * 0.2f, y - 10, width * 0.1f, 12);
-            canvas.FillRectangle(x + width * 0.7f, y - 10, width * 0.1f, 12);
-        }
-
-        float windshieldHeight = height * 0.25f;
-        float windshieldY = y + height - windshieldHeight - 10;
-        canvas.FillColor = Colors.LightSkyBlue.WithAlpha(0.8f);
-        canvas.FillRoundedRectangle(x + 5, windshieldY, width - 10, windshieldHeight, 4);
-
-        canvas.FillColor = Colors.Yellow;
-        float lightSize = 5f;
-        float lightY = y + height - lightSize;
-        canvas.FillCircle(x + lightSize, lightY, lightSize);
-        canvas.FillCircle(x + width - lightSize, lightY, lightSize);
-
-        // Используем DrawString вместо DrawBoldText для текста
-        canvas.FontColor = Colors.White;
-        canvas.FontSize = 12;
-        canvas.DrawString("POLICE", x + width * 0.35f, y + height * 0.45f, width * 0.3f, 15,
-            HorizontalAlignment.Center, VerticalAlignment.Center);
-    }
-
-    private void DrawTaxi(ICanvas canvas, float x, float y, float width, float height)
-    {
-        canvas.FillColor = Colors.Black.WithAlpha(0.5f);
-        canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 8);
-
-        canvas.FillColor = Colors.Yellow;
-        canvas.FillRoundedRectangle(x, y, width, height, 8);
-
-        canvas.FillColor = Colors.Black;
-        float checkerSize = 8f;
-        for (float cx = x + 10; cx < x + width - 10; cx += checkerSize * 2)
-        {
-            for (float cy = y + 5; cy < y + 20; cy += checkerSize * 2)
+            if (_gameState.InvulnerabilityFrames % 4 == 0)
             {
-                canvas.FillRectangle(cx, cy, checkerSize, checkerSize);
-                canvas.FillRectangle(cx + checkerSize, cy + checkerSize, checkerSize, checkerSize);
+                return; // Skip this frame
             }
         }
 
-        canvas.FillColor = Colors.Red;
-        canvas.FillRectangle(x + width * 0.4f, y - 5, width * 0.2f, 8);
+        // Increased size by PLAYER_SIZE_MULTIPLIER (50%)
+        float drawWidth = width * PLAYER_SIZE_MULTIPLIER;
+        float drawHeight = height * PLAYER_SIZE_MULTIPLIER;
 
-        canvas.FontColor = Colors.White;
-        canvas.FontSize = 10;
-        canvas.DrawString("TAXI", x + width * 0.4f, y - 5, width * 0.2f, 8,
-            HorizontalAlignment.Center, VerticalAlignment.Center);
+        // Calculate offset to keep center at same position
+        float offsetX = (drawWidth - width) / 2;
+        float offsetY = (drawHeight - height) / 2;
 
+        // Draw custom skin if selected and loaded
+        if (_selectedCar.Name == "CUSTOM" && _customImageLoaded && _customPlayerImage != null)
+        {
+            try
+            {
+                // Save canvas state
+                canvas.SaveState();
+
+                // Draw custom image
+                canvas.DrawImage(_customPlayerImage, x - offsetX, y - offsetY, drawWidth, drawHeight);
+
+                // Restore canvas state
+                canvas.RestoreState();
+                return;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error drawing custom skin: {ex.Message}");
+                // Fallback to standard drawing
+            }
+        }
+
+        // Try to draw sprite
+        string imageKey = GetPlayerImageKey(_selectedCar.Name);
+
+        if (_carImages.TryGetValue(imageKey, out var image) && image != null)
+        {
+            try
+            {
+                canvas.DrawImage(image, x - offsetX, y - offsetY, drawWidth, drawHeight);
+                return;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error drawing player sprite {imageKey}: {ex.Message}");
+                // Fallback to colored rectangle
+            }
+        }
+
+        // Fallback: colored rectangle
+        DrawCarShape(canvas, x - offsetX, y - offsetY, drawWidth, drawHeight, _selectedCar.Color);
+    }
+
+    private string GetPlayerImageKey(string carName)
+    {
+        return carName switch
+        {
+            "BASIC" => "Blue",
+            "SPORTS" => "Green",
+            "POLICE" => "Police",
+            "TAXI" => "Taxi",
+            "RACING" => "LightBlue",
+            "VIP" => "Blue", // VIP uses Blue as placeholder
+            "CUSTOM" => "Blue", // Custom also uses Blue as fallback
+            _ => "Blue"
+        };
+    }
+
+    private void DrawCarShape(ICanvas canvas, float x, float y, float width, float height, Color color)
+    {
+        // Car body
+        canvas.FillColor = color;
+        canvas.FillRoundedRectangle(x, y, width, height, 8);
+
+        // Windows
         canvas.FillColor = Colors.LightSkyBlue.WithAlpha(0.8f);
-        canvas.FillRoundedRectangle(x + 5, y + 5, width - 10, height * 0.25f, 4);
+        canvas.FillRoundedRectangle(x + width * 0.1f, y + height * 0.1f,
+                                  width * 0.8f, height * 0.25f, 4);
 
-        canvas.FillColor = Colors.White;
-        float lightSize = 5f;
-        canvas.FillCircle(x + lightSize, y + height - lightSize, lightSize);
-        canvas.FillCircle(x + width - lightSize, y + height - lightSize, lightSize);
+        // Headlights
+        canvas.FillColor = Colors.Yellow;
+        canvas.FillCircle(x + 5, y + height - 5, 4);
+        canvas.FillCircle(x + width - 5, y + height - 5, 4);
+
+        // Taillights
+        canvas.FillColor = Colors.Red;
+        canvas.FillCircle(x + 5, y + 5, 4);
+        canvas.FillCircle(x + width - 5, y + 5, 4);
     }
 
-    private void DrawRacingCar(ICanvas canvas, float x, float y, float width, float height)
+    private void DrawCollectible(ICanvas canvas, Collectible collectible)
     {
-        canvas.FillColor = Colors.Black.WithAlpha(0.5f);
-        canvas.FillRoundedRectangle(x + 5, y + 5, width, height, 10);
+        float x = collectible.X;
+        float y = collectible.Y;
+        float size = collectible.Width;
 
-        canvas.FillColor = _selectedCar.Color;
-        float racingHeight = height * 0.7f;
-        canvas.FillRoundedRectangle(x, y + (height - racingHeight), width, racingHeight, 10);
-
-        canvas.FillColor = Colors.Black;
-        canvas.FillRectangle(x + width * 0.2f, y + (height - racingHeight) + 5, width * 0.6f, 15);
-
-        canvas.FontColor = Colors.White;
-        canvas.FontSize = 10;
-        canvas.DrawString("RACING", x + width * 0.3f, y + height * 0.3f, width * 0.4f, 15,
-            HorizontalAlignment.Center, VerticalAlignment.Center);
-
-        canvas.FontColor = Colors.Black;
-        canvas.FontSize = 16;
-        canvas.DrawString("01", x + width * 0.4f, y + height * 0.5f, width * 0.2f, 20,
-            HorizontalAlignment.Center, VerticalAlignment.Center);
-
-        canvas.FillColor = Colors.DarkGray;
-        canvas.FillRectangle(x + width * 0.15f, y + height - 8, 6, 10);
-        canvas.FillRectangle(x + width * 0.85f - 6, y + height - 8, 6, 10);
-    }
-
-    private void DrawVIPCar(ICanvas canvas, float x, float y, float width, float height)
-    {
+        // Glow effect
         canvas.FillColor = Colors.Gold.WithAlpha(0.3f);
-        canvas.FillRoundedRectangle(x + 3, y + 3, width + 4, height + 4, 10);
+        canvas.FillCircle(x + size / 2, y + size / 2, size / 2 + 2);
 
+        // Coin body
         canvas.FillColor = Colors.Gold;
-        canvas.FillRoundedRectangle(x, y, width, height, 10);
+        canvas.FillCircle(x + size / 2, y + size / 2, size / 2);
 
-        canvas.StrokeColor = Colors.Silver;
-        canvas.StrokeSize = 2;
-        canvas.DrawRoundedRectangle(x + 3, y + 3, width - 6, height - 6, 8);
-
-        canvas.FillColor = Colors.DarkSlateBlue.WithAlpha(0.9f);
-        canvas.FillRoundedRectangle(x + 8, y + 8, width - 16, height * 0.3f, 6);
-
-        canvas.FontColor = Colors.White;
-        canvas.FontSize = 20;
-        canvas.DrawString("⭐", x + width * 0.45f, y + height * 0.6f, width * 0.1f, 20,
+        // Dollar sign
+        var paint = new SolidPaint(Colors.DarkGoldenrod);
+        canvas.SetFillPaint(paint, new RectF(x, y, size, size));
+        canvas.FontSize = size * 0.6f;
+        canvas.DrawString("$", x, y, size, size,
             HorizontalAlignment.Center, VerticalAlignment.Center);
-
-        canvas.FillColor = Colors.Silver;
-        canvas.FillRectangle(x + width * 0.3f, y + height - 20, width * 0.4f, 10);
-
-        canvas.FillColor = Colors.Cyan;
-        canvas.FillCircle(x + 8, y + height - 15, 6);
-        canvas.FillColor = Colors.Magenta;
-        canvas.FillCircle(x + width - 8, y + height - 15, 6);
     }
 
-    private void DrawEnemies(ICanvas canvas)
+    private void DrawBonus(ICanvas canvas, Bonus bonus)
     {
-        foreach (var enemy in _gameState.Enemies)
+        float x = bonus.X;
+        float y = bonus.Y;
+        float size = bonus.Width;
+        float centerX = x + size / 2;
+        float centerY = y + size / 2;
+
+        // Glow based on type
+        Color glowColor = bonus.Type switch
         {
-            enemy.X = enemy.CalculateX(_gameState.ScreenWidth);
+            Bonus.BonusType.Shield => Colors.Cyan.WithAlpha(0.3f),
+            Bonus.BonusType.Magnet => Colors.Red.WithAlpha(0.3f),
+            Bonus.BonusType.SlowMotion => Colors.Yellow.WithAlpha(0.3f),
+            Bonus.BonusType.Multiplier => Colors.Green.WithAlpha(0.3f),
+            Bonus.BonusType.CoinRain => Colors.Gold.WithAlpha(0.3f),
+            _ => Colors.White.WithAlpha(0.3f)
+        };
 
-            switch (enemy.Type)
-            {
-                case Enemy.EnemyType.RegularCar:
-                    DrawRegularCar(canvas, enemy);
-                    break;
-                case Enemy.EnemyType.Truck:
-                    DrawTruck(canvas, enemy);
-                    break;
-                case Enemy.EnemyType.Motorcycle:
-                    DrawMotorcycle(canvas, enemy);
-                    break;
-                case Enemy.EnemyType.Police:
-                    DrawEnemyPoliceCar(canvas, enemy);
-                    break;
-            }
-        }
+        canvas.FillColor = glowColor;
+        canvas.FillCircle(centerX, centerY, size / 2 + 3);
+
+        // Bonus body
+        Color bodyColor = bonus.Type switch
+        {
+            Bonus.BonusType.Shield => Colors.Cyan,
+            Bonus.BonusType.Magnet => Colors.Red,
+            Bonus.BonusType.SlowMotion => Colors.Yellow,
+            Bonus.BonusType.Multiplier => Colors.Green,
+            Bonus.BonusType.CoinRain => Colors.Gold,
+            _ => Colors.White
+        };
+
+        canvas.FillColor = bodyColor;
+        canvas.FillCircle(centerX, centerY, size / 2);
+
+        // Bonus symbol
+        string symbol = bonus.Type switch
+        {
+            Bonus.BonusType.Shield => "🛡️",
+            Bonus.BonusType.Magnet => "🧲",
+            Bonus.BonusType.SlowMotion => "🐌",
+            Bonus.BonusType.Multiplier => "x2",
+            Bonus.BonusType.CoinRain => "💰",
+            _ => "?"
+        };
+
+        var paint = new SolidPaint(Colors.White);
+        canvas.SetFillPaint(paint, new RectF(x, y, size, size));
+        canvas.FontSize = size * 0.5f;
+        canvas.DrawString(symbol, x, y, size, size,
+            HorizontalAlignment.Center, VerticalAlignment.Center);
     }
 
-    private void DrawRegularCar(ICanvas canvas, Enemy enemy)
+    private void DrawFuelCan(ICanvas canvas, FuelCan fuelCan)
     {
-        float width = enemy.Width;
-        float height = enemy.Height;
-        float windshieldHeight = height * 0.25f;
-        float lightSize = 5f;
+        float x = fuelCan.X;
+        float y = fuelCan.Y;
+        float width = fuelCan.Width;
+        float height = fuelCan.Height;
 
+        // Highlight when fuel is low
+        if (_gameState.Player.CurrentFuel < 30)
+        {
+            canvas.StrokeColor = Colors.Yellow;
+            canvas.StrokeSize = 2;
+            canvas.DrawRoundedRectangle(x - 2, y - 2, width + 4, height + 4, 4);
+        }
+
+        // Canister body
         canvas.FillColor = Colors.Red;
-        canvas.FillRoundedRectangle(enemy.X, enemy.Y, width, height, 8);
+        canvas.FillRoundedRectangle(x, y, width, height * 0.7f, 3);
 
-        float windshieldY = enemy.Y + height - windshieldHeight - 10;
-        canvas.FillColor = Colors.Gray;
-        canvas.FillRoundedRectangle(enemy.X + 5, windshieldY, width - 10, windshieldHeight, 4);
+        // Canister neck
+        canvas.FillColor = Colors.DarkGray;
+        canvas.FillRoundedRectangle(x + width * 0.4f, y - 5, width * 0.2f, 10, 2);
 
-        canvas.FillColor = Colors.Yellow;
-        float lightY = enemy.Y + height - lightSize;
-        canvas.FillCircle(enemy.X + lightSize, lightY, lightSize);
-        canvas.FillCircle(enemy.X + width - lightSize, lightY, lightSize);
-
-        canvas.FillColor = Colors.DarkRed;
-        canvas.FillCircle(enemy.X + lightSize, enemy.Y + lightSize, lightSize);
-        canvas.FillCircle(enemy.X + width - lightSize, enemy.Y + lightSize, lightSize);
-    }
-
-    private void DrawTruck(ICanvas canvas, Enemy enemy)
-    {
-        float width = enemy.Width;
-        float height = enemy.Height;
-
-        canvas.FillColor = Colors.DarkBlue;
-        canvas.FillRoundedRectangle(enemy.X, enemy.Y, width * 0.4f, height, 8);
-
-        canvas.FillColor = Colors.Blue;
-        canvas.FillRectangle(enemy.X + width * 0.4f, enemy.Y, width * 0.6f, height);
-
-        canvas.FillColor = Colors.LightGray;
-        canvas.FillRoundedRectangle(enemy.X + 5, enemy.Y + 5, width * 0.4f - 10, height * 0.3f, 4);
-
-        canvas.FillColor = Colors.Black;
-        float wheelSize = 8f;
-        canvas.FillCircle(enemy.X + width * 0.1f, enemy.Y + height - wheelSize / 2, wheelSize);
-        canvas.FillCircle(enemy.X + width * 0.3f, enemy.Y + height - wheelSize / 2, wheelSize);
-        canvas.FillCircle(enemy.X + width * 0.7f, enemy.Y + height - wheelSize / 2, wheelSize);
-        canvas.FillCircle(enemy.X + width * 0.9f, enemy.Y + height - wheelSize / 2, wheelSize);
-    }
-
-    private void DrawMotorcycle(ICanvas canvas, Enemy enemy)
-    {
-        float width = enemy.Width;
-        float height = enemy.Height;
-
-        canvas.FillColor = Colors.DarkRed;
-        canvas.FillRoundedRectangle(enemy.X, enemy.Y + height * 0.4f, width, height * 0.6f, 10);
-
-        canvas.FillColor = Colors.Black;
-        canvas.FillRoundedRectangle(enemy.X + width * 0.3f, enemy.Y + height * 0.3f, width * 0.4f, height * 0.2f, 5);
-
-        canvas.FillColor = Colors.Black;
-        float wheelSize = 10f;
-        canvas.FillCircle(enemy.X + width * 0.25f, enemy.Y + height - wheelSize / 2, wheelSize);
-        canvas.FillCircle(enemy.X + width * 0.75f, enemy.Y + height - wheelSize / 2, wheelSize);
-
-        canvas.StrokeColor = Colors.Black;
-        canvas.StrokeSize = 3;
-        float handlebarY = enemy.Y + height * 0.4f;
-        canvas.DrawLine(enemy.X + width * 0.5f, handlebarY, enemy.X + width * 0.5f, handlebarY - 15);
-        canvas.DrawLine(enemy.X + width * 0.5f, handlebarY - 15, enemy.X + width * 0.2f, handlebarY - 10);
-        canvas.DrawLine(enemy.X + width * 0.5f, handlebarY - 15, enemy.X + width * 0.8f, handlebarY - 10);
-    }
-
-    private void DrawEnemyPoliceCar(ICanvas canvas, Enemy enemy)
-    {
-        float width = enemy.Width;
-        float height = enemy.Height;
-        float windshieldHeight = height * 0.25f;
-        float lightSize = 5f;
-
-        canvas.FillColor = Colors.Blue;
-        canvas.FillRoundedRectangle(enemy.X, enemy.Y, width, height, 8);
-
-        canvas.FillColor = Colors.White;
-        canvas.FillRectangle(enemy.X, enemy.Y + height * 0.4f, width, height * 0.2f);
-
-        float windshieldY = enemy.Y + height - windshieldHeight - 10;
-        canvas.FillColor = Colors.Gray;
-        canvas.FillRoundedRectangle(enemy.X + 5, windshieldY, width - 10, windshieldHeight, 4);
-
-        canvas.FillColor = Colors.Yellow;
-        float lightY = enemy.Y + height - lightSize;
-        canvas.FillCircle(enemy.X + lightSize, lightY, lightSize);
-        canvas.FillCircle(enemy.X + width - lightSize, lightY, lightSize);
-
-        canvas.FontColor = Colors.White;
-        canvas.FontSize = 12;
-        canvas.DrawString("POLICE", enemy.X + width * 0.35f, enemy.Y + height * 0.45f,
-                         width * 0.3f, 15, HorizontalAlignment.Center, VerticalAlignment.Center);
-    }
-
-    private void DrawCollectibles(ICanvas canvas)
-    {
-        canvas.FillColor = Colors.Gold;
-        canvas.StrokeColor = Colors.DarkGoldenrod;
-        canvas.StrokeSize = 2;
-
-        foreach (var collectible in _gameState.Collectibles)
-        {
-            collectible.X = collectible.CalculateX(_gameState.ScreenWidth);
-
-            float radius = collectible.Width / 2f;
-            float centerX = collectible.X + radius;
-            float centerY = collectible.Y + radius;
-
-            canvas.FillCircle(centerX, centerY, radius);
-            canvas.DrawCircle(centerX, centerY, radius);
-
-            canvas.FontColor = Colors.Black;
-            canvas.FontSize = 20;
-            canvas.DrawString("$", collectible.X, collectible.Y, collectible.Width, collectible.Height,
-                HorizontalAlignment.Center, VerticalAlignment.Center);
-        }
-    }
-
-    private void DrawBonuses(ICanvas canvas)
-    {
-        foreach (var bonus in _gameState.Bonuses)
-        {
-            bonus.X = bonus.CalculateX(_gameState.ScreenWidth);
-            float width = bonus.Width;
-            float height = bonus.Height;
-            float radius = width / 2f;
-            float centerX = bonus.X + radius;
-            float centerY = bonus.Y + radius;
-
-            switch (bonus.Type)
-            {
-                case Bonus.BonusType.Shield:
-                    canvas.FillColor = Colors.Cyan;
-                    canvas.StrokeColor = Colors.Blue;
-                    canvas.StrokeSize = 3;
-                    canvas.DrawCircle(centerX, centerY, radius);
-                    canvas.FillCircle(centerX, centerY, radius - 2);
-                    canvas.FontColor = Colors.Blue;
-                    canvas.FontSize = 24;
-                    canvas.DrawString("🛡️", bonus.X, bonus.Y, width, height,
-                        HorizontalAlignment.Center, VerticalAlignment.Center);
-                    break;
-
-                case Bonus.BonusType.Magnet:
-                    canvas.FillColor = Colors.Red;
-                    canvas.StrokeColor = Colors.DarkRed;
-                    canvas.StrokeSize = 3;
-                    canvas.DrawCircle(centerX, centerY, radius);
-                    canvas.FillCircle(centerX, centerY, radius - 2);
-                    canvas.FontColor = Colors.White;
-                    canvas.FontSize = 24;
-                    canvas.DrawString("🧲", bonus.X, bonus.Y, width, height,
-                        HorizontalAlignment.Center, VerticalAlignment.Center);
-                    break;
-
-                case Bonus.BonusType.SlowMotion:
-                    canvas.FillColor = Colors.Yellow;
-                    canvas.StrokeColor = Colors.Orange;
-                    canvas.StrokeSize = 3;
-                    canvas.DrawCircle(centerX, centerY, radius);
-                    canvas.FillCircle(centerX, centerY, radius - 2);
-                    canvas.FontColor = Colors.Black;
-                    canvas.FontSize = 24;
-                    canvas.DrawString("🐌", bonus.X, bonus.Y, width, height,
-                        HorizontalAlignment.Center, VerticalAlignment.Center);
-                    break;
-
-                case Bonus.BonusType.Multiplier:
-                    canvas.FillColor = Colors.Green;
-                    canvas.StrokeColor = Colors.DarkGreen;
-                    canvas.StrokeSize = 3;
-                    canvas.DrawCircle(centerX, centerY, radius);
-                    canvas.FillCircle(centerX, centerY, radius - 2);
-                    canvas.FontColor = Colors.White;
-                    canvas.FontSize = 20;
-                    canvas.DrawString("x2", bonus.X, bonus.Y, width, height,
-                        HorizontalAlignment.Center, VerticalAlignment.Center);
-                    break;
-
-                case Bonus.BonusType.CoinRain:
-                    canvas.FillColor = Colors.Gold;
-                    canvas.StrokeColor = Colors.DarkGoldenrod;
-                    canvas.StrokeSize = 3;
-                    canvas.DrawCircle(centerX, centerY, radius);
-                    canvas.FillCircle(centerX, centerY, radius - 2);
-                    canvas.FontColor = Colors.Black;
-                    canvas.FontSize = 24;
-                    canvas.DrawString("💰", bonus.X, bonus.Y, width, height,
-                        HorizontalAlignment.Center, VerticalAlignment.Center);
-                    break;
-            }
-        }
+        // Fuel symbol
+        var paint = new SolidPaint(Colors.White);
+        canvas.SetFillPaint(paint, new RectF(x, y, width, height));
+        canvas.FontSize = height * 0.4f;
+        canvas.DrawString("⛽", x, y, width, height,
+            HorizontalAlignment.Center, VerticalAlignment.Center);
     }
 
     private void DrawHud(ICanvas canvas)
     {
-        // Score and High Score
-        canvas.FontColor = Colors.White;
-        canvas.FontSize = 24;
-        DrawBoldText(canvas, $"Score: {_gameState.Score}", 20, 40, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+        DrawScoreHud(canvas);
+        DrawLivesHud(canvas);
+        DrawActiveBonusesHud(canvas);
+        DrawFuelIndicator(canvas);
+    }
 
+    private void DrawScoreHud(ICanvas canvas)
+    {
+        float padding = 15;
+        float currentY = padding;
+
+        // Score
+        var scorePaint = new SolidPaint(Colors.White);
+        canvas.SetFillPaint(scorePaint, new RectF(padding, currentY, 250, 30));
+        canvas.FontSize = 22;
+        DrawBoldText(canvas, $"SCORE: {_gameState.Score}", padding, currentY, 250, 30);
+        currentY += 35;
+
+        // High score
         int highScore = Preferences.Get("HighScore", 0);
-        DrawBoldText(canvas, $"High Score: {highScore}", 20, 70, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+        var bestPaint = new SolidPaint(Colors.Gold);
+        canvas.SetFillPaint(bestPaint, new RectF(padding, currentY, 250, 25));
+        canvas.FontSize = 18;
+        DrawBoldText(canvas, $"BEST: {highScore}", padding, currentY, 250, 25);
+        currentY += 30;
 
-        // Coins Collected
-        canvas.FontColor = Colors.Gold;
-        canvas.FontSize = 24;
-        DrawBoldText(canvas, $"Coins: {_gameState.CoinsCollected} 💰", 20, 100, 200, 50, HorizontalAlignment.Left, VerticalAlignment.Top);
+        // Coins
+        var coinsPaint = new SolidPaint(Colors.LightYellow);
+        canvas.SetFillPaint(coinsPaint, new RectF(padding, currentY, 250, 25));
+        canvas.FontSize = 18;
+        DrawBoldText(canvas, $"COINS: {_gameState.CoinsCollected}", padding, currentY, 250, 25);
+        currentY += 30;
 
-        // Current Car Indicator
-        canvas.FontColor = _selectedCar.Color;
+        // Car name
+        var carPaint = new SolidPaint(_selectedCar.Color);
+        canvas.SetFillPaint(carPaint, new RectF(padding, currentY, 250, 25));
         canvas.FontSize = 16;
-        DrawBoldText(canvas, $"Car: {_selectedCar.Name}", 20, 130, 200, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
+        string carDisplayName = _selectedCar.Name == "CUSTOM" && _customImageLoaded ?
+            "CUSTOM (Loaded)" : _selectedCar.Name;
+        DrawBoldText(canvas, $"CAR: {carDisplayName}", padding, currentY, 250, 25);
+    }
 
-        // Lives (hearts)
-        canvas.FontColor = Colors.Red;
-        canvas.FontSize = 30;
-        float heartX = _gameState.ScreenWidth - 120;
+    private void DrawLivesHud(ICanvas canvas)
+    {
+        float rightX = _gameState.ScreenWidth - 160;
+        float y = 20;
+
+        var heartPaint = new SolidPaint(Colors.Red);
+        canvas.SetFillPaint(heartPaint, new RectF(rightX, y, 120, 30));
+        canvas.FontSize = 28;
 
         for (int i = 0; i < _gameState.Lives; i++)
         {
-            DrawBoldText(canvas, "❤️", heartX + (i * 30), 40, 30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
+            DrawBoldText(canvas, "❤️", rightX + (i * 35), y, 30, 30);
         }
+    }
 
-        // Active Bonuses Icons
-        float bonusX = _gameState.ScreenWidth - 120;
-        float bonusY = 100;
-        int activeBonusCount = 0;
+    private void DrawActiveBonusesHud(ICanvas canvas)
+    {
+        float x = _gameState.ScreenWidth - 160;
+        float y = 70;
+        float iconSize = 28;
+        float spacing = 8;
+        float currentX = x;
 
         if (_gameState.IsShieldActive)
         {
-            canvas.FontColor = Colors.Cyan;
-            canvas.FontSize = 24;
-            DrawBoldText(canvas, "🛡️", bonusX + (activeBonusCount * 30), bonusY,
-                30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
-            activeBonusCount++;
+            DrawBonusIcon(canvas, "🛡️", Colors.Cyan, currentX, y, iconSize);
+            currentX += iconSize + spacing;
         }
 
         if (_gameState.IsMagnetActive)
         {
-            canvas.FontColor = Colors.Red;
-            canvas.FontSize = 24;
-            DrawBoldText(canvas, "🧲", bonusX + (activeBonusCount * 30), bonusY,
-                30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
-            activeBonusCount++;
+            DrawBonusIcon(canvas, "🧲", Colors.Red, currentX, y, iconSize);
+            currentX += iconSize + spacing;
         }
 
         if (_gameState.IsSlowMotionActive)
         {
-            canvas.FontColor = Colors.Yellow;
-            canvas.FontSize = 24;
-            DrawBoldText(canvas, "🐌", bonusX + (activeBonusCount * 30), bonusY,
-                30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
-            activeBonusCount++;
+            DrawBonusIcon(canvas, "🐌", Colors.Yellow, currentX, y, iconSize);
+            currentX += iconSize + spacing;
         }
 
         if (_gameState.IsMultiplierActive)
         {
-            canvas.FontColor = Colors.Green;
-            canvas.FontSize = 24;
-            DrawBoldText(canvas, "x2", bonusX + (activeBonusCount * 30), bonusY,
-                30, 30, HorizontalAlignment.Left, VerticalAlignment.Top);
-            activeBonusCount++;
+            DrawBonusIcon(canvas, "x2", Colors.Green, currentX, y, iconSize);
         }
+    }
+
+    private void DrawBonusIcon(ICanvas canvas, string symbol, Color color, float x, float y, float size)
+    {
+        // Background
+        canvas.FillColor = color.WithAlpha(0.2f);
+        canvas.FillRoundedRectangle(x - 2, y - 2, size + 4, size + 4, 4);
+
+        // Icon
+        var paint = new SolidPaint(color);
+        canvas.SetFillPaint(paint, new RectF(x, y, size, size));
+        canvas.FontSize = size * 0.7f;
+        canvas.DrawString(symbol, x, y, size, size,
+            HorizontalAlignment.Center, VerticalAlignment.Center);
     }
 
     private void DrawFuelIndicator(ICanvas canvas)
     {
-        float fuelBarX = _gameState.ScreenWidth - 220;
-        float fuelBarY = 40;
-        float fuelBarWidth = 200;
-        float fuelBarHeight = 20;
+        float width = 200;
+        float height = 20;
+        float x = (_gameState.ScreenWidth - width) / 2;
+        float y = _gameState.ScreenHeight - 50;
 
-        canvas.FillColor = Colors.DarkGray.WithAlpha(0.8f);
-        canvas.FillRoundedRectangle(fuelBarX, fuelBarY, fuelBarWidth, fuelBarHeight, 10);
+        // Background
+        canvas.FillColor = Color.FromArgb("#333333");
+        canvas.FillRoundedRectangle(x, y, width, height, 10);
 
-        float fuelPercentage = _gameState.Player.CurrentFuel / _gameState.Player.MaxFuel;
-        float fillWidth = fuelBarWidth * fuelPercentage;
+        // Fill
+        float fillPercent = _gameState.Player.CurrentFuel / _gameState.Player.MaxFuel;
+        float fillWidth = width * fillPercent;
 
-        if (fuelPercentage > 0.5f)
-            canvas.FillColor = Colors.LimeGreen;
-        else if (fuelPercentage > 0.2f)
-            canvas.FillColor = Colors.Orange;
-        else
-            canvas.FillColor = Colors.Red;
+        Color fillColor = fillPercent > 0.5f ? Colors.LimeGreen :
+                         fillPercent > 0.2f ? Colors.Orange :
+                         Colors.Red;
 
-        canvas.FillRoundedRectangle(fuelBarX, fuelBarY, fillWidth, fuelBarHeight, 10);
+        canvas.FillColor = fillColor;
+        canvas.FillRoundedRectangle(x, y, fillWidth, height, 10);
 
-        canvas.StrokeColor = Colors.White;
-        canvas.StrokeSize = 2;
-        canvas.DrawRoundedRectangle(fuelBarX, fuelBarY, fuelBarWidth, fuelBarHeight, 10);
+        // Border
+        canvas.StrokeColor = Colors.White.WithAlpha(0.5f);
+        canvas.StrokeSize = 1;
+        canvas.DrawRoundedRectangle(x, y, width, height, 10);
 
-        canvas.FontColor = Colors.White;
+        // Text
+        var paint = new SolidPaint(Colors.White);
+        canvas.SetFillPaint(paint, new RectF(x, y + height + 5, width, 20));
         canvas.FontSize = 12;
-        DrawBoldText(canvas, $"FUEL: {_gameState.Player.CurrentFuel:F0}/{_gameState.Player.MaxFuel:F0}",
-            fuelBarX, fuelBarY + fuelBarHeight + 5, fuelBarWidth, 20,
+        canvas.DrawString($"FUEL: {(int)_gameState.Player.CurrentFuel}/{(int)_gameState.Player.MaxFuel}",
+            x, y + height + 5, width, 20,
             HorizontalAlignment.Center, VerticalAlignment.Top);
     }
 
-    private void DrawFuelCans(ICanvas canvas)
+    private void DrawGameStates(ICanvas canvas, RectF dirtyRect)
     {
-        canvas.FillColor = Colors.Red;
-        canvas.StrokeColor = Colors.DarkRed;
-        canvas.StrokeSize = 2;
-
-        foreach (var fuelCan in _gameState.FuelCans)
+        // Low fuel warning
+        if (_gameState.Player.CurrentFuel < 30 && !_gameState.IsGameOver)
         {
-            fuelCan.X = fuelCan.CalculateX(_gameState.ScreenWidth);
+            DrawLowFuelWarning(canvas, dirtyRect);
+        }
 
-            float width = fuelCan.Width;
-            float height = fuelCan.Height;
-
-            canvas.FillColor = Colors.Red;
-            canvas.FillRectangle(fuelCan.X, fuelCan.Y, width, height * 0.7f);
-
-            canvas.FillColor = Colors.DarkGray;
-            canvas.FillRoundedRectangle(fuelCan.X + width * 0.4f, fuelCan.Y - 5,
-                width * 0.2f, 10, 5);
-
-            canvas.FillColor = Colors.White;
-            canvas.FontSize = 16;
-            DrawBoldText(canvas, "⛽", fuelCan.X, fuelCan.Y, width, height,
-                HorizontalAlignment.Center, VerticalAlignment.Center);
-
-            if (_gameState.Player.CurrentFuel < 30)
-            {
-                canvas.StrokeColor = Colors.Yellow.WithAlpha(0.5f);
-                canvas.StrokeSize = 4;
-                canvas.DrawRectangle(fuelCan.X - 2, fuelCan.Y - 2,
-                    width + 4, height + 4);
-            }
+        // Game over
+        if (_gameState.IsGameOver)
+        {
+            DrawGameOver(canvas, dirtyRect);
         }
     }
 
     private void DrawLowFuelWarning(ICanvas canvas, RectF dirtyRect)
     {
-        if ((DateTime.Now.Millisecond / 500) % 2 == 0)
-        {
-            canvas.FontColor = Colors.Red;
-            canvas.FontSize = 24;
+        // Blinking effect
+        bool show = (DateTime.Now.Millisecond / 500) % 2 == 0;
+        if (!show) return;
 
-            string warning = _gameState.Player.CurrentFuel < 10 ? "CRITICAL FUEL!" : "LOW FUEL!";
-            DrawBoldText(canvas, warning, dirtyRect.Center.X - 100, dirtyRect.Center.Y - 100,
-                200, 50, HorizontalAlignment.Center, VerticalAlignment.Center);
-        }
+        string text = _gameState.Player.CurrentFuel < 10 ? "⚠️ CRITICAL FUEL!" : "LOW FUEL!";
+        Color color = _gameState.Player.CurrentFuel < 10 ? Colors.Red : Colors.Orange;
+
+        var paint = new SolidPaint(color);
+        canvas.SetFillPaint(paint, new RectF(dirtyRect.Center.X - 150, dirtyRect.Center.Y - 100, 300, 60));
+        canvas.FontSize = 28;
+
+        // Shadow
+        var shadowPaint = new SolidPaint(Colors.Black.WithAlpha(0.5f));
+        canvas.SetFillPaint(shadowPaint, new RectF(dirtyRect.Center.X - 149, dirtyRect.Center.Y - 99, 300, 60));
+        canvas.DrawString(text, dirtyRect.Center.X - 149, dirtyRect.Center.Y - 99, 300, 60,
+            HorizontalAlignment.Center, VerticalAlignment.Center);
+
+        // Main text
+        canvas.SetFillPaint(paint, new RectF(dirtyRect.Center.X - 150, dirtyRect.Center.Y - 100, 300, 60));
+        canvas.DrawString(text, dirtyRect.Center.X - 150, dirtyRect.Center.Y - 100, 300, 60,
+            HorizontalAlignment.Center, VerticalAlignment.Center);
     }
 
     private void DrawGameOver(ICanvas canvas, RectF dirtyRect)
     {
-        canvas.FontColor = Colors.Red;
+        // Dark overlay
+        canvas.FillColor = Colors.Black.WithAlpha(0.7f);
+        canvas.FillRectangle(dirtyRect);
+
+        // "Game Over" text
+        var textPaint = new SolidPaint(Colors.Red);
+        canvas.SetFillPaint(textPaint, new RectF(dirtyRect.Center.X - 150, dirtyRect.Center.Y - 50, 300, 100));
         canvas.FontSize = 48;
-        DrawBoldText(canvas, "CRASHED!", dirtyRect.Center.X - 150, dirtyRect.Center.Y - 50,
-            300, 100, HorizontalAlignment.Center, VerticalAlignment.Center);
+
+        // Shadow
+        var shadowPaint = new SolidPaint(Colors.Black.WithAlpha(0.5f));
+        canvas.SetFillPaint(shadowPaint, new RectF(dirtyRect.Center.X - 149, dirtyRect.Center.Y - 49, 300, 100));
+        canvas.DrawString("GAME OVER", dirtyRect.Center.X - 149, dirtyRect.Center.Y - 49, 300, 100,
+            HorizontalAlignment.Center, VerticalAlignment.Center);
+
+        // Main text
+        canvas.SetFillPaint(textPaint, new RectF(dirtyRect.Center.X - 150, dirtyRect.Center.Y - 50, 300, 100));
+        canvas.DrawString("GAME OVER", dirtyRect.Center.X - 150, dirtyRect.Center.Y - 50, 300, 100,
+            HorizontalAlignment.Center, VerticalAlignment.Center);
+
+        // Final score
+        var scorePaint = new SolidPaint(Colors.White);
+        canvas.SetFillPaint(scorePaint, new RectF(dirtyRect.Center.X - 150, dirtyRect.Center.Y + 60, 300, 40));
+        canvas.FontSize = 24;
+        canvas.DrawString($"Score: {_gameState.Score}", dirtyRect.Center.X - 150, dirtyRect.Center.Y + 60, 300, 40,
+            HorizontalAlignment.Center, VerticalAlignment.Center);
     }
 
     private void DrawBoldText(ICanvas canvas, string text, float x, float y, float width, float height,
                               HorizontalAlignment hAlign = HorizontalAlignment.Left,
                               VerticalAlignment vAlign = VerticalAlignment.Top)
     {
-        // Используем текущие настройки шрифта (уже установлены перед вызовом)
-        canvas.DrawString(text, x - 0.5f, y, width, height, hAlign, vAlign);
-        canvas.DrawString(text, x + 0.5f, y, width, height, hAlign, vAlign);
-        canvas.DrawString(text, x, y - 0.5f, width, height, hAlign, vAlign);
-        canvas.DrawString(text, x, y + 0.5f, width, height, hAlign, vAlign);
+        // Draw text with shadow for bold effect
+        var shadowPaint = new SolidPaint(Colors.Black.WithAlpha(0.3f));
+        canvas.SetFillPaint(shadowPaint, new RectF(x + 1, y + 1, width, height));
+        canvas.DrawString(text, x + 1, y + 1, width, height, hAlign, vAlign);
+
+        // Main text (color already set in calling method)
         canvas.DrawString(text, x, y, width, height, hAlign, vAlign);
     }
 }

@@ -1,11 +1,9 @@
-﻿using Microsoft.Maui.Graphics;
-
-namespace Driving.Models;
+﻿namespace Driving.Models;
 
 public class FuelCan : GameEntity
 {
     public int Lane { get; set; }
-    public float FuelAmount { get; set; } = 25f; // Сколько топлива добавляет
+    public float FuelAmount { get; set; } = 20f; // How much fuel it adds
 
     public FuelCan(float width, float height, int lane)
     {

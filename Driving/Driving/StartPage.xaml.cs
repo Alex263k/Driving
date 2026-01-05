@@ -1,4 +1,13 @@
-﻿namespace Driving;
+﻿using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
+using Microsoft.Maui.Storage;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Threading.Tasks;
+
+namespace Driving;
 
 public partial class StartPage : ContentPage
 {
@@ -9,13 +18,15 @@ public partial class StartPage : ContentPage
     private const string SelectedCarKey = "SelectedCar";
     private const string DurabilityLevelKey = "DurabilityLevel";
     private const string SpeedLevelKey = "SpeedLevel";
+    private const string CustomSkinPathKey = "CustomSkinPath";
 
     // Car class for storing car data
-        public class CarInfo
-        {
-            public string Name { get; set; } = string.Empty;
+    public class CarInfo
+    {
+        public string Name { get; set; } = string.Empty;
         public Color Color { get; set; } = Colors.LimeGreen;
         public string Emoji { get; set; } = "🚗";
+        public string? CustomImagePath { get; set; }
     }
 
     private List<CarInfo> _cars = new List<CarInfo>();
@@ -29,6 +40,15 @@ public partial class StartPage : ContentPage
 
     private void InitializeCars()
     {
+        // Load custom skin path if exists
+        string? customSkinPath = null;
+        if (Preferences.ContainsKey(CustomSkinPathKey))
+        {
+            customSkinPath = Preferences.Get(CustomSkinPathKey, string.Empty);
+            if (!File.Exists(customSkinPath))
+                customSkinPath = null;
+        }
+
         // Initialize car collection (all cars unlocked)
         _cars = new List<CarInfo>
         {
@@ -37,7 +57,13 @@ public partial class StartPage : ContentPage
             new CarInfo { Name = "POLICE", Color = Colors.Blue, Emoji = "🚓" },
             new CarInfo { Name = "TAXI", Color = Colors.Yellow, Emoji = "🚖" },
             new CarInfo { Name = "RACING", Color = Colors.Magenta, Emoji = "🏁" },
-            new CarInfo { Name = "VIP", Color = Colors.Gold, Emoji = "⭐" }
+            new CarInfo { Name = "VIP", Color = Colors.Gold, Emoji = "⭐" },
+            new CarInfo {
+                Name = "CUSTOM",
+                Color = Colors.Purple,
+                Emoji = "🎨",
+                CustomImagePath = customSkinPath
+            }
         };
 
         // Load selected car
@@ -77,6 +103,30 @@ public partial class StartPage : ContentPage
         // Update car display
         CarBody.Color = currentCar.Color;
         CarNameLabel.Text = currentCar.Name;
+        CarEmojiLabel.Text = currentCar.Emoji;
+
+        // Show/hide custom image
+        bool isCustomCar = currentCar.Name == "CUSTOM";
+        CustomCarImage.IsVisible = isCustomCar && !string.IsNullOrEmpty(currentCar.CustomImagePath);
+        CarBody.IsVisible = !CustomCarImage.IsVisible;
+
+        // Load custom image if exists
+        if (isCustomCar && !string.IsNullOrEmpty(currentCar.CustomImagePath) && File.Exists(currentCar.CustomImagePath))
+        {
+            try
+            {
+                CustomCarImage.Source = ImageSource.FromFile(currentCar.CustomImagePath);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error loading custom image: {ex.Message}");
+                CustomCarImage.IsVisible = false;
+                CarBody.IsVisible = true;
+            }
+        }
+
+        // Show/hide upload button
+        UploadCustomButton.IsVisible = isCustomCar;
 
         // Update navigation buttons
         PrevCarButton.IsEnabled = _currentCarIndex > 0;
@@ -121,6 +171,44 @@ public partial class StartPage : ContentPage
             await CarDisplayGrid.TranslateTo(30, 0, 100);
             CarDisplayGrid.TranslationX = -30;
             await CarDisplayGrid.TranslateTo(0, 0, 100);
+        }
+    }
+
+    private async void OnUploadCustomClicked(object sender, EventArgs e)
+    {
+        try
+        {
+            var result = await FilePicker.PickAsync(new PickOptions
+            {
+                PickerTitle = "Выберите изображение для скина",
+                FileTypes = FilePickerFileType.Images
+            });
+
+            if (result == null) return;
+
+            // Copy file to app data directory
+            var targetPath = Path.Combine(FileSystem.AppDataDirectory, "custom_car.png");
+
+            using (var sourceStream = await result.OpenReadAsync())
+            using (var targetStream = File.Create(targetPath))
+            {
+                await sourceStream.CopyToAsync(targetStream);
+            }
+
+            // Save path to preferences
+            Preferences.Set(CustomSkinPathKey, targetPath);
+
+            // Update current car info
+            _cars[_currentCarIndex].CustomImagePath = targetPath;
+
+            // Update display
+            UpdateCarDisplay();
+
+            await DisplayAlert("Успех!", "Скин успешно загружен!", "OK");
+        }
+        catch (Exception ex)
+        {
+            await DisplayAlert("Ошибка", $"Не удалось загрузить изображение: {ex.Message}", "OK");
         }
     }
 
@@ -171,7 +259,13 @@ public partial class StartPage : ContentPage
             new CarInfo { Name = "POLICE", Color = Colors.Blue, Emoji = "🚓" },
             new CarInfo { Name = "TAXI", Color = Colors.Yellow, Emoji = "🚖" },
             new CarInfo { Name = "RACING", Color = Colors.Magenta, Emoji = "🏁" },
-            new CarInfo { Name = "VIP", Color = Colors.Gold, Emoji = "⭐" }
+            new CarInfo { Name = "VIP", Color = Colors.Gold, Emoji = "⭐" },
+            new CarInfo {
+                Name = "CUSTOM",
+                Color = Colors.Purple,
+                Emoji = "🎨",
+                CustomImagePath = Preferences.Get(CustomSkinPathKey, string.Empty)
+            }
         };
 
         if (selectedIndex >= 0 && selectedIndex < cars.Count)
