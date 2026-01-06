@@ -351,6 +351,7 @@
                             CornerRadius="22"
                             FontAttributes="Bold"/>
 
+
                 </VerticalStackLayout>
             </Border>
 

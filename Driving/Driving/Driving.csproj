@@ -60,17 +60,22 @@
 		<EmbeddedResource Include="Resources\Images\police.png" />
 		<EmbeddedResource Include="Resources\Images\taxi.png" />
 		<EmbeddedResource Include="Resources\Images\dotnet_bot.png" />
+		<EmbeddedResource Include="Resources\Images\heart.png" />
 
 		<!-- Custom Fonts -->
 		<MauiFont Include="Resources\Fonts\*" />
 
 		<!-- Raw Assets -->
+	</ItemGroup>
+
+	<ItemGroup>
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.5" />
+		<PackageReference Include="Plugin.Maui.Audio" Version="4.0.0" />
 	</ItemGroup>
 
 </Project>

@@ -6,12 +6,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using Plugin.Maui.Audio; // Необходим установленный NuGet пакет Plugin.Maui.Audio
 
 namespace Driving;
 
 public partial class StartPage : ContentPage
 {
-    // Keys for storing game data
+    // Ключи для хранения данных игры
     private const string HighScoreKey = "HighScore";
     private const string TotalCoinsKey = "TotalCoins";
     private const string GamesPlayedKey = "GamesPlayed";
@@ -20,7 +21,7 @@ public partial class StartPage : ContentPage
     private const string SpeedLevelKey = "SpeedLevel";
     private const string CustomSkinPathKey = "CustomSkinPath";
 
-    // Car class for storing car data
+    // Класс для хранения данных автомобиля
     public class CarInfo
     {
         public string Name { get; set; } = string.Empty;
@@ -32,15 +33,50 @@ public partial class StartPage : ContentPage
     private List<CarInfo> _cars = new List<CarInfo>();
     private int _currentCarIndex = 0;
 
+    // Поля для работы со звуком
+    private IAudioPlayer _buttonClickSound;
+    private IAudioPlayer _carSwitchSound;
+    private IAudioPlayer _startGameSound;
+
     public StartPage()
     {
         InitializeComponent();
         InitializeCars();
+        LoadSounds(); // Инициализация звуков при запуске
+    }
+
+    private async void LoadSounds()
+    {
+        try
+        {
+            // Загружаем аудиофайлы из ресурсов MauiAsset
+            _buttonClickSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("button_click.wav"));
+            _carSwitchSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("car_switch.wav"));
+            _startGameSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("start_game.wav"));
+
+            // Устанавливаем базовую громкость
+            if (_buttonClickSound != null) _buttonClickSound.Volume = 0.5;
+            if (_carSwitchSound != null) _carSwitchSound.Volume = 0.5;
+            if (_startGameSound != null) _startGameSound.Volume = 0.7;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"!!! ОШИБКА ЗАГРУЗКИ ЗВУКА НА STARTPAGE: {ex.Message}");
+        }
+    }
+
+    private void PlaySound(IAudioPlayer player)
+    {
+        if (player != null)
+        {
+            if (player.IsPlaying) player.Stop();
+            player.Play();
+        }
     }
 
     private void InitializeCars()
     {
-        // Load custom skin path if exists
+        // Загрузка пути кастомного скина, если он существует
         string? customSkinPath = null;
         if (Preferences.ContainsKey(CustomSkinPathKey))
         {
@@ -49,7 +85,7 @@ public partial class StartPage : ContentPage
                 customSkinPath = null;
         }
 
-        // Initialize car collection (all cars unlocked)
+        // Инициализация коллекции автомобилей
         _cars = new List<CarInfo>
         {
             new CarInfo { Name = "BASIC", Color = Colors.LimeGreen, Emoji = "🚗" },
@@ -66,7 +102,7 @@ public partial class StartPage : ContentPage
             }
         };
 
-        // Load selected car
+        // Загрузка последнего выбранного авто
         _currentCarIndex = Preferences.Get(SelectedCarKey, 0);
         if (_currentCarIndex >= _cars.Count)
         {
@@ -83,12 +119,10 @@ public partial class StartPage : ContentPage
 
     private void LoadAndDisplayStats()
     {
-        // Load all statistics from preferences
         int highScore = Preferences.Get(HighScoreKey, 0);
         int totalCoins = Preferences.Get(TotalCoinsKey, 0);
         int gamesPlayed = Preferences.Get(GamesPlayedKey, 0);
 
-        // Update labels with loaded data
         HighScoreLabel.Text = highScore.ToString();
         CoinsLabel.Text = totalCoins.ToString();
         GamesPlayedLabel.Text = gamesPlayed.ToString();
@@ -100,17 +134,14 @@ public partial class StartPage : ContentPage
 
         var currentCar = _cars[_currentCarIndex];
 
-        // Update car display
         CarBody.Color = currentCar.Color;
         CarNameLabel.Text = currentCar.Name;
         CarEmojiLabel.Text = currentCar.Emoji;
 
-        // Show/hide custom image
         bool isCustomCar = currentCar.Name == "CUSTOM";
         CustomCarImage.IsVisible = isCustomCar && !string.IsNullOrEmpty(currentCar.CustomImagePath);
         CarBody.IsVisible = !CustomCarImage.IsVisible;
 
-        // Load custom image if exists
         if (isCustomCar && !string.IsNullOrEmpty(currentCar.CustomImagePath) && File.Exists(currentCar.CustomImagePath))
         {
             try
@@ -125,10 +156,8 @@ public partial class StartPage : ContentPage
             }
         }
 
-        // Show/hide upload button
         UploadCustomButton.IsVisible = isCustomCar;
 
-        // Update navigation buttons
         PrevCarButton.IsEnabled = _currentCarIndex > 0;
         NextCarButton.IsEnabled = _currentCarIndex < _cars.Count - 1;
 
@@ -140,15 +169,14 @@ public partial class StartPage : ContentPage
     {
         if (_currentCarIndex > 0)
         {
+            PlaySound(_carSwitchSound); // Звук переключения
             _currentCarIndex--;
             UpdateCarDisplay();
 
-            // Animate button
             var button = (Button)sender;
             await button.ScaleTo(0.8, 100, Easing.CubicInOut);
             await button.ScaleTo(1.0, 100, Easing.CubicInOut);
 
-            // Animate car change
             await CarDisplayGrid.TranslateTo(-30, 0, 100);
             CarDisplayGrid.TranslationX = 30;
             await CarDisplayGrid.TranslateTo(0, 0, 100);
@@ -159,15 +187,14 @@ public partial class StartPage : ContentPage
     {
         if (_currentCarIndex < _cars.Count - 1)
         {
+            PlaySound(_carSwitchSound); // Звук переключения
             _currentCarIndex++;
             UpdateCarDisplay();
 
-            // Animate button
             var button = (Button)sender;
             await button.ScaleTo(0.8, 100, Easing.CubicInOut);
             await button.ScaleTo(1.0, 100, Easing.CubicInOut);
 
-            // Animate car change
             await CarDisplayGrid.TranslateTo(30, 0, 100);
             CarDisplayGrid.TranslationX = -30;
             await CarDisplayGrid.TranslateTo(0, 0, 100);
@@ -176,6 +203,7 @@ public partial class StartPage : ContentPage
 
     private async void OnUploadCustomClicked(object sender, EventArgs e)
     {
+        PlaySound(_buttonClickSound); // Звук нажатия
         try
         {
             var result = await FilePicker.PickAsync(new PickOptions
@@ -186,7 +214,6 @@ public partial class StartPage : ContentPage
 
             if (result == null) return;
 
-            // Copy file to app data directory
             var targetPath = Path.Combine(FileSystem.AppDataDirectory, "custom_car.png");
 
             using (var sourceStream = await result.OpenReadAsync())
@@ -195,15 +222,10 @@ public partial class StartPage : ContentPage
                 await sourceStream.CopyToAsync(targetStream);
             }
 
-            // Save path to preferences
             Preferences.Set(CustomSkinPathKey, targetPath);
-
-            // Update current car info
             _cars[_currentCarIndex].CustomImagePath = targetPath;
 
-            // Update display
             UpdateCarDisplay();
-
             await DisplayAlert("Успех!", "Скин успешно загружен!", "OK");
         }
         catch (Exception ex)
@@ -214,6 +236,7 @@ public partial class StartPage : ContentPage
 
     private async void OnUpgradesClicked(object sender, EventArgs e)
     {
+        PlaySound(_buttonClickSound); // Звук нажатия
         var button = (Button)sender;
         await button.ScaleTo(0.95, 100, Easing.CubicInOut);
         await button.ScaleTo(1.0, 100, Easing.CubicInOut);
@@ -223,18 +246,19 @@ public partial class StartPage : ContentPage
 
     private async void OnStartClicked(object sender, EventArgs e)
     {
+        PlaySound(_startGameSound); // Звук начала игры
+
         var button = (Button)sender;
         await button.ScaleTo(0.95, 100, Easing.CubicInOut);
         await button.ScaleTo(1.0, 100, Easing.CubicInOut);
 
-        // Increment games played counter
+        // Увеличиваем счетчик сыгранных игр
         int gamesPlayed = Preferences.Get(GamesPlayedKey, 0);
         Preferences.Set(GamesPlayedKey, gamesPlayed + 1);
 
-        // Save selected car
+        // Сохраняем выбранную машину
         Preferences.Set(SelectedCarKey, _currentCarIndex);
 
-        // Navigate to the Game scene with selected car info
         if (_currentCarIndex < _cars.Count)
         {
             var selectedCar = _cars[_currentCarIndex];
@@ -242,16 +266,17 @@ public partial class StartPage : ContentPage
         }
         else
         {
-            // Fallback to default car
             var defaultCar = new CarInfo { Name = "BASIC", Color = Colors.LimeGreen, Emoji = "🚗" };
             await Navigation.PushAsync(new GamePage(defaultCar));
         }
     }
 
-    // Static method to get selected car for other pages
     public static CarInfo GetSelectedCar()
     {
         int selectedIndex = Preferences.Get(SelectedCarKey, 0);
+
+        string customPath = Preferences.Get(CustomSkinPathKey, string.Empty);
+
         var cars = new List<CarInfo>
         {
             new CarInfo { Name = "BASIC", Color = Colors.LimeGreen, Emoji = "🚗" },
@@ -264,7 +289,7 @@ public partial class StartPage : ContentPage
                 Name = "CUSTOM",
                 Color = Colors.Purple,
                 Emoji = "🎨",
-                CustomImagePath = Preferences.Get(CustomSkinPathKey, string.Empty)
+                CustomImagePath = customPath
             }
         };
 
@@ -273,6 +298,6 @@ public partial class StartPage : ContentPage
             return cars[selectedIndex];
         }
 
-        return cars[0]; // Default to BASIC car
+        return cars[0];
     }
 }

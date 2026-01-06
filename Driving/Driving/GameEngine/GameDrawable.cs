@@ -100,7 +100,8 @@ public class GameDrawable : IDrawable
                 { "Green", "green.png" },
                 { "LightBlue", "lightblue.png" },
                 { "Police", "police.png" },
-                { "Taxi", "taxi.png" }
+                { "Taxi", "taxi.png" },
+                { "Heart", "heart.png" }
             };
 
             foreach (var imagePair in imagesToLoad)
@@ -115,6 +116,7 @@ public class GameDrawable : IDrawable
             _carImages["EnemyLightBlue"] = _carImages["LightBlue"];
             _carImages["EnemyPolice"] = _carImages["Police"];
             _carImages["EnemyTaxi"] = _carImages["Taxi"];
+
 
             _imagesLoaded = true;
             Debug.WriteLine($"=== SPRITES LOADED ===");
@@ -661,16 +663,28 @@ public class GameDrawable : IDrawable
 
     private void DrawLivesHud(ICanvas canvas)
     {
-        float rightX = _gameState.ScreenWidth - 160;
+        float rightX = _gameState.ScreenWidth - 180;
         float y = 20;
+        float heartSize = 30; // Размер иконки сердечка
 
-        var heartPaint = new SolidPaint(Colors.Red);
-        canvas.SetFillPaint(heartPaint, new RectF(rightX, y, 120, 30));
-        canvas.FontSize = 28;
-
-        for (int i = 0; i < _gameState.Lives; i++)
+        if (_carImages.TryGetValue("Heart", out var heartImage) && heartImage != null)
         {
-            DrawBoldText(canvas, "❤️", rightX + (i * 35), y, 30, 30);
+            for (int i = 0; i < _gameState.Lives; i++)
+            {
+                // Отрисовка картинки heart.png
+                canvas.DrawImage(heartImage, rightX + (i * (heartSize + 5)), y, heartSize, heartSize);
+            }
+        }
+        else
+        {
+            // Резервный вариант на случай, если картинка не загрузилась
+            var heartPaint = new SolidPaint(Colors.Red);
+            canvas.SetFillPaint(heartPaint, new RectF(rightX, y, 120, 30));
+            canvas.FontSize = 28;
+            for (int i = 0; i < _gameState.Lives; i++)
+            {
+                DrawBoldText(canvas, "❤️", rightX + (i * 35), y, 30, 30);
+            }
         }
     }
 

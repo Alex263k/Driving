@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Plugin.Maui.Audio; // 1. Добавили ссылку на плагин
 
 namespace Driving
 {
@@ -15,8 +16,11 @@ namespace Driving
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
 
+            // 2. Регистрируем менеджер аудио, чтобы он был доступен в игре
+            builder.Services.AddSingleton(AudioManager.Current);
+
 #if DEBUG
-    		builder.Logging.AddDebug();
+            builder.Logging.AddDebug();
 #endif
 
             return builder.Build();
