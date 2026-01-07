@@ -1,4 +1,7 @@
 ﻿using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
+using Microsoft.Maui.Storage;
+using Microsoft.Maui.ApplicationModel;
 using Plugin.Maui.Audio;
 
 namespace Driving;
@@ -15,6 +18,7 @@ public partial class UpgradePage : ContentPage
     private const string SpeedLevelKey = "SpeedLevel";
     private const string FuelTankLevelKey = "FuelTankLevel";
     private const string EngineEfficiencyLevelKey = "EngineEfficiencyLevel";
+    private const string IsMutedKey = "IsMuted";
 
     // Configuration constants
     private const int MaxUpgradeLevel = 10;
@@ -24,6 +28,7 @@ public partial class UpgradePage : ContentPage
     private int _speedLevel = 1;
     private int _fuelTankLevel = 1;
     private int _engineEfficiencyLevel = 1;
+    private bool _isMuted = false;
 
     // Lists to manage UI progress segments efficiently
     private List<BoxView> _durabilitySegments = new List<BoxView>();
@@ -41,6 +46,10 @@ public partial class UpgradePage : ContentPage
     {
         InitializeComponent();
         InitializeProgressSegments();
+
+        // Load mute state
+        _isMuted = Preferences.Get(IsMutedKey, false);
+
         LoadUpgradeLevels();
         LoadSounds();
     }
@@ -57,18 +66,20 @@ public partial class UpgradePage : ContentPage
             _errorSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("error_sound.wav"));
             _backButtonClickSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("car_switch.wav"));
 
-            // Инициализация новой фоновой музыки (Gameplay Theme)
+            // Initialize background music (Gameplay Theme)
             _backgroundMusic = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("gameplay_theme.mp3"));
 
             if (_backgroundMusic != null)
             {
-                _backgroundMusic.Loop = true;     // Цикличное воспроизведение
-                _backgroundMusic.Volume = 0.4;    // Умеренная громкость
-                _backgroundMusic.Play();
+                _backgroundMusic.Loop = true;
+                _backgroundMusic.Volume = _isMuted ? 0 : 0.4;
+                if (!_isMuted) _backgroundMusic.Play();
             }
 
-            // Настройка громкости эффектов
-            if (_upgradeSuccessSound != null) _upgradeSuccessSound.Volume = 0.6;
+            // Set volume based on mute state
+            if (_upgradeSuccessSound != null) _upgradeSuccessSound.Volume = _isMuted ? 0 : 0.6;
+            if (_errorSound != null) _errorSound.Volume = _isMuted ? 0 : 0.6;
+            if (_backButtonClickSound != null) _backButtonClickSound.Volume = _isMuted ? 0 : 0.5;
         }
         catch (Exception ex)
         {
@@ -81,7 +92,7 @@ public partial class UpgradePage : ContentPage
     /// </summary>
     private void PlaySound(IAudioPlayer player)
     {
-        if (player != null)
+        if (player != null && !_isMuted)
         {
             if (player.IsPlaying) player.Stop();
             player.Play();
@@ -117,7 +128,24 @@ public partial class UpgradePage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+
+        // Update mute state when page appears
+        _isMuted = Preferences.Get(IsMutedKey, false);
+
         LoadUpgradeLevels();
+
+        // Update background music based on mute state
+        if (_backgroundMusic != null)
+        {
+            if (_isMuted && _backgroundMusic.IsPlaying)
+            {
+                _backgroundMusic.Stop();
+            }
+            else if (!_isMuted && !_backgroundMusic.IsPlaying)
+            {
+                _backgroundMusic.Play();
+            }
+        }
     }
 
     /// <summary>
@@ -129,8 +157,6 @@ public partial class UpgradePage : ContentPage
         if (_backgroundMusic != null)
         {
             if (_backgroundMusic.IsPlaying) _backgroundMusic.Stop();
-            _backgroundMusic.Dispose();
-            _backgroundMusic = null;
         }
     }
 
@@ -181,8 +207,19 @@ public partial class UpgradePage : ContentPage
 
     private void UpdateBtnState(Button btn, int level, int price, int playerCoins, string activeHex)
     {
-        if (level >= MaxUpgradeLevel) { btn.Text = "MAX LEVEL"; btn.BackgroundColor = Colors.Gray; btn.IsEnabled = false; }
-        else { btn.IsEnabled = true; btn.BackgroundColor = playerCoins >= price ? Color.FromArgb(activeHex) : Color.FromArgb("#6b7280"); }
+        if (level >= MaxUpgradeLevel)
+        {
+            btn.Text = "MAX LEVEL";
+            btn.BackgroundColor = Colors.Gray;
+            btn.IsEnabled = false;
+            btn.Opacity = 0.7;
+        }
+        else
+        {
+            btn.IsEnabled = true;
+            btn.BackgroundColor = playerCoins >= price ? Color.FromArgb(activeHex) : Color.FromArgb("#6b7280");
+            btn.Opacity = playerCoins >= price ? 1.0 : 0.7;
+        }
     }
 
     // Price scaling logic
@@ -212,18 +249,35 @@ public partial class UpgradePage : ContentPage
             if (key == EngineEfficiencyLevelKey) Preferences.Set(key, _engineEfficiencyLevel);
 
             LoadUpgradeLevels();
-            await btn.ScaleTo(0.9, 50); await btn.ScaleTo(1.0, 50);
+
+            try
+            {
+                HapticFeedback.Default.Perform(HapticFeedbackType.Click);
+            }
+            catch { }
+
+            await btn.ScaleTo(0.9, 50);
+            await btn.ScaleTo(1.0, 50);
         }
         else
         {
             PlaySound(_errorSound);
-            await btn.TranslateTo(10, 0, 50); await btn.TranslateTo(-10, 0, 50); await btn.TranslateTo(0, 0, 50);
+            await btn.TranslateTo(10, 0, 50);
+            await btn.TranslateTo(-10, 0, 50);
+            await btn.TranslateTo(0, 0, 50);
         }
     }
 
     private async void OnBackClicked(object sender, EventArgs e)
     {
         PlaySound(_backButtonClickSound);
+
+        try
+        {
+            HapticFeedback.Default.Perform(HapticFeedbackType.Click);
+        }
+        catch { }
+
         await Navigation.PopAsync();
     }
 }

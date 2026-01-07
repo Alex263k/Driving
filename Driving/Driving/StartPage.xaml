@@ -211,5 +211,31 @@
                         FontAttributes="Bold"/>
             </Grid>
         </Grid>
+
+        <!-- Кнопки звука и сброса поверх всего контента -->
+        <StackLayout HorizontalOptions="Start"
+                     VerticalOptions="Center"
+                     Spacing="10"
+                     Margin="10">
+            <Button x:Name="MuteButton"
+                    Text="🔊"
+                    BackgroundColor="#475569"
+                    TextColor="White"
+                    FontSize="20"
+                    WidthRequest="60"
+                    HeightRequest="60"
+                    CornerRadius="30"
+                    Clicked="OnMuteClicked"/>
+
+            <Button x:Name="ResetButton"
+                    Text="🔄"
+                    BackgroundColor="#475569"
+                    TextColor="White"
+                    FontSize="20"
+                    WidthRequest="60"
+                    HeightRequest="60"
+                    CornerRadius="30"
+                    Clicked="OnResetClicked"/>
+        </StackLayout>
     </Grid>
 </ContentPage>

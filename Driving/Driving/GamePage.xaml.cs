@@ -9,6 +9,9 @@ using Driving.Models;
 
 namespace Driving;
 
+/// <summary>
+/// Main game page logic. Handles game loop, collision detection, audio, and player input.
+/// </summary>
 public partial class GamePage : ContentPage
 {
     private readonly GameState _gameState;
@@ -17,12 +20,13 @@ public partial class GamePage : ContentPage
     private readonly Random _random = new Random();
     private readonly StartPage.CarInfo _selectedCar;
 
-    // AUDIO PLAYERS
+    // Audio Players
     private IAudioPlayer _backgroundMusic;
     private IAudioPlayer _collectSound;
     private IAudioPlayer _powerUpSound;
     private IAudioPlayer _gameOverSound;
     private bool _isAudioLoaded = false;
+    private bool _isMuted = false; // Added for mute support
 
     // Collision and movement settings
     private enum CollisionResult { None, SideCollision, FrontalCollision }
@@ -36,12 +40,22 @@ public partial class GamePage : ContentPage
     private const int SpeedIncreaseInterval = 250;
     private const float SpeedIncrement = 0.8f;
 
+    /// <summary>
+    /// Default constructor using the currently selected car.
+    /// </summary>
     public GamePage() : this(StartPage.GetSelectedCar()) { }
 
+    /// <summary>
+    /// Constructor with a specific car selection.
+    /// </summary>
+    /// <param name="selectedCar">The car to use in this game session.</param>
     public GamePage(StartPage.CarInfo selectedCar)
     {
         InitializeComponent();
         _selectedCar = selectedCar;
+
+        // Load mute state from preferences
+        _isMuted = Preferences.Get("IsMuted", false);
 
         _gameState = new GameState();
         _gameDrawable = new GameDrawable(_gameState, _selectedCar);
@@ -58,6 +72,9 @@ public partial class GamePage : ContentPage
         GameCanvas.GestureRecognizers.Add(tapGesture);
     }
 
+    /// <summary>
+    /// Called when the page appears. Sets up audio and starts a new game.
+    /// </summary>
     protected override async void OnAppearing()
     {
         base.OnAppearing();
@@ -65,6 +82,9 @@ public partial class GamePage : ContentPage
         StartNewGame();
     }
 
+    /// <summary>
+    /// Called when the page disappears. Stops the game loop and background music.
+    /// </summary>
     protected override void OnDisappearing()
     {
         base.OnDisappearing();
@@ -72,6 +92,9 @@ public partial class GamePage : ContentPage
         _backgroundMusic?.Stop();
     }
 
+    /// <summary>
+    /// Loads all audio files asynchronously.
+    /// </summary>
     private async Task SetupAudioAsync()
     {
         if (_isAudioLoaded) return;
@@ -81,12 +104,17 @@ public partial class GamePage : ContentPage
             // Load engine background sound
             _backgroundMusic = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("Engine.wav"));
             _backgroundMusic.Loop = true;
-            _backgroundMusic.Volume = 0.5;
+            _backgroundMusic.Volume = _isMuted ? 0 : 0.5; // Respect mute state
 
             // Load SFX
             _collectSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("coin_collect.wav"));
+            _collectSound.Volume = _isMuted ? 0 : 0.6; // Respect mute state
+
             _gameOverSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("game_over.wav"));
+            _gameOverSound.Volume = _isMuted ? 0 : 0.7; // Respect mute state
+
             _powerUpSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("upgrade_success.wav"));
+            _powerUpSound.Volume = _isMuted ? 0 : 0.6; // Respect mute state
 
             _isAudioLoaded = true;
         }
@@ -96,6 +124,22 @@ public partial class GamePage : ContentPage
         }
     }
 
+    /// <summary>
+    /// Helper method to play a sound with mute check.
+    /// </summary>
+    /// <param name="player">The audio player to use.</param>
+    private void PlaySound(IAudioPlayer player)
+    {
+        if (player != null && !_isMuted)
+        {
+            if (player.IsPlaying) player.Stop();
+            player.Play();
+        }
+    }
+
+    /// <summary>
+    /// Resets the game state and starts a new game session.
+    /// </summary>
     private void StartNewGame()
     {
         _gameState.IsRunning = true;
@@ -108,25 +152,33 @@ public partial class GamePage : ContentPage
         _gameState.InvulnerabilityFrames = 0;
         _gameState.IsFuelDepleted = false;
 
+        // Clear all game entities
         _gameState.Enemies.Clear();
         _gameState.Collectibles.Clear();
         _gameState.Bonuses.Clear();
         _gameState.FuelCans.Clear();
 
+        // Reset player position
         _gameState.Player.CurrentLane = 1;
         _gameState.Player.VisualX = 0;
         _gameState.Player.IsAnimating = false;
 
+        // Apply fuel upgrades from player progress
         ApplyFuelUpgrades();
 
-        if (_backgroundMusic != null)
+        // Start background music if not muted
+        if (_backgroundMusic != null && !_isMuted)
         {
             _backgroundMusic.Play();
         }
 
+        // Start the game loop
         _gameLoop.Start();
     }
 
+    /// <summary>
+    /// Main game loop that updates game state 60 times per second.
+    /// </summary>
     private void GameLoop_Tick(object? sender, EventArgs e)
     {
         if (!_gameState.IsRunning || _gameState.IsGameOver) return;
@@ -153,6 +205,9 @@ public partial class GamePage : ContentPage
         GameCanvas.Invalidate();
     }
 
+    /// <summary>
+    /// Updates the game speed based on player upgrades and score progression.
+    /// </summary>
     private void UpdateGameSpeed()
     {
         float baseSpeed = BaseSpeed * GetPlayerSpeedMultiplier();
@@ -160,6 +215,9 @@ public partial class GamePage : ContentPage
         _gameState.Speed = Math.Min(baseSpeed + scoreBonus, MaxSpeed);
     }
 
+    /// <summary>
+    /// Applies fuel tank and engine efficiency upgrades to the player's car.
+    /// </summary>
     private void ApplyFuelUpgrades()
     {
         int tankLevel = Preferences.Get("FuelTankLevel", 1);
@@ -170,6 +228,9 @@ public partial class GamePage : ContentPage
         _gameState.Player.FuelConsumptionRate = 0.1f * (1f - (engineLevel - 1) * 0.1f);
     }
 
+    /// <summary>
+    /// Updates the duration of active power-ups.
+    /// </summary>
     private void UpdateActiveBonuses()
     {
         if (_gameState.ShieldFrames > 0 && --_gameState.ShieldFrames == 0) _gameState.IsShieldActive = false;
@@ -182,6 +243,9 @@ public partial class GamePage : ContentPage
         }
     }
 
+    /// <summary>
+    /// Updates all game entities (enemies, collectibles, bonuses).
+    /// </summary>
     private void UpdateEntities()
     {
         // Enemy Spawning
@@ -229,7 +293,7 @@ public partial class GamePage : ContentPage
             {
                 _gameState.CoinsCollected++;
                 _gameState.Score += 50;
-                _collectSound?.Play();
+                PlaySound(_collectSound);
                 _gameState.Collectibles.RemoveAt(i);
             }
             else if (coin.Y > _gameState.ScreenHeight) _gameState.Collectibles.RemoveAt(i);
@@ -249,13 +313,16 @@ public partial class GamePage : ContentPage
             if (CheckBonusCollection(bonus, _gameState.Player))
             {
                 ApplyBonus(bonus.Type);
-                _powerUpSound?.Play();
+                PlaySound(_powerUpSound);
                 _gameState.Bonuses.RemoveAt(i);
             }
             else if (bonus.Y > _gameState.ScreenHeight) _gameState.Bonuses.RemoveAt(i);
         }
     }
 
+    /// <summary>
+    /// Updates the fuel system including consumption and fuel can collection.
+    /// </summary>
     private void UpdateFuelSystem()
     {
         // Use time-based fuel consumption
@@ -292,7 +359,7 @@ public partial class GamePage : ContentPage
             if (CheckFuelCanCollection(fuel, _gameState.Player))
             {
                 _gameState.Player.CurrentFuel = Math.Min(_gameState.Player.MaxFuel, _gameState.Player.CurrentFuel + 30f);
-                _collectSound?.Play();
+                PlaySound(_collectSound);
                 _gameState.FuelCans.RemoveAt(i);
             }
             else if (fuel.Y > _gameState.ScreenHeight)
@@ -302,16 +369,27 @@ public partial class GamePage : ContentPage
         }
     }
 
+    /// <summary>
+    /// Returns a random enemy type.
+    /// </summary>
     private Enemy.EnemyType GetRandomEnemyType() => (Enemy.EnemyType)_random.Next(0, 4);
+
+    /// <summary>
+    /// Returns a random bonus type.
+    /// </summary>
     private Bonus.BonusType GetRandomBonusType() => (Bonus.BonusType)_random.Next(0, 5);
 
+    /// <summary>
+    /// Ends the current game session with the specified title.
+    /// </summary>
+    /// <param name="title">The game over title/message.</param>
     private void EndGame(string title)
     {
         _gameState.IsRunning = false;
         _gameState.IsGameOver = true;
         _gameLoop.Stop();
         _backgroundMusic?.Stop();
-        _gameOverSound?.Play();
+        PlaySound(_gameOverSound);
 
         // Save Highscore and Currency
         Preferences.Set("HighScore", Math.Max(Preferences.Get("HighScore", 0), _gameState.Score));
@@ -321,6 +399,9 @@ public partial class GamePage : ContentPage
         GameCanvas.Invalidate();
     }
 
+    /// <summary>
+    /// Handles canvas tap gestures (used to exit after game over).
+    /// </summary>
     private void OnCanvasTapped(object? sender, TappedEventArgs e)
     {
         // If the game is over, any tap on the screen returns the user to the previous page
@@ -330,6 +411,9 @@ public partial class GamePage : ContentPage
         }
     }
 
+    /// <summary>
+    /// Updates the player's lane change animation.
+    /// </summary>
     private void UpdatePlayerAnimation()
     {
         if (!_gameState.Player.IsAnimating) return;
@@ -343,6 +427,10 @@ public partial class GamePage : ContentPage
         if (--_gameState.Player.AnimationFramesRemaining <= 0) _gameState.Player.IsAnimating = false;
     }
 
+    /// <summary>
+    /// Checks for collision between an enemy and the player.
+    /// </summary>
+    /// <returns>The type of collision that occurred.</returns>
     private CollisionResult CheckCarCollision(Enemy e, Player p)
     {
         float pY = _gameState.ScreenHeight - 150;
@@ -355,14 +443,31 @@ public partial class GamePage : ContentPage
         return CollisionResult.None;
     }
 
+    /// <summary>
+    /// Checks if a coin was collected by the player.
+    /// </summary>
     private bool CheckCoinCollection(Collectible c, Player p) => GenericCollision(c.CalculateX(_gameState.ScreenWidth), c.Y, c.Width, c.Height);
+
+    /// <summary>
+    /// Checks if a bonus was collected by the player.
+    /// </summary>
     private bool CheckBonusCollection(Bonus b, Player p) => GenericCollision(b.CalculateX(_gameState.ScreenWidth), b.Y, b.Width, b.Height);
+
+    /// <summary>
+    /// Checks if a fuel can was collected by the player.
+    /// </summary>
     private bool CheckFuelCanCollection(FuelCan f, Player p) => GenericCollision(f.CalculateX(_gameState.ScreenWidth), f.Y, f.Width, f.Height);
 
+    /// <summary>
+    /// Generic collision detection between the player and any rectangular entity.
+    /// </summary>
     private bool GenericCollision(float x, float y, float w, float h) =>
         _gameState.Player.VisualX < x + w && _gameState.Player.VisualX + 60 > x &&
         _gameState.Player.VisualY < y + h && _gameState.Player.VisualY + 100 > y;
 
+    /// <summary>
+    /// Applies the effect of a collected bonus to the game state.
+    /// </summary>
     private void ApplyBonus(Bonus.BonusType type)
     {
         switch (type)
@@ -387,6 +492,9 @@ public partial class GamePage : ContentPage
         }
     }
 
+    /// <summary>
+    /// Handles swipe gestures for lane changes.
+    /// </summary>
     private void OnSwiped(object? sender, SwipedEventArgs e)
     {
         if (!_gameState.IsRunning || _gameState.Player.IsAnimating || _gameState.IsGameOver) return;
@@ -404,6 +512,13 @@ public partial class GamePage : ContentPage
         _gameState.Player.AnimationFramesRemaining = LaneChangeFrames;
     }
 
+    /// <summary>
+    /// Gets the player's durability level from upgrades.
+    /// </summary>
     private int GetPlayerDurability() => Preferences.Get("DurabilityLevel", 1);
+
+    /// <summary>
+    /// Gets the player's speed multiplier from upgrades.
+    /// </summary>
     private float GetPlayerSpeedMultiplier() => 1.0f + (Preferences.Get("SpeedLevel", 1) - 1) * 0.1f;
 }

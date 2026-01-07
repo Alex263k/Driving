@@ -21,6 +21,7 @@ public partial class StartPage : ContentPage
     private const string GamesPlayedKey = "GamesPlayed";
     private const string SelectedCarKey = "SelectedCar";
     private const string CustomSkinPathKey = "CustomSkinPath";
+    private const string IsMutedKey = "IsMuted";
 
     public class CarInfo
     {
@@ -32,18 +33,24 @@ public partial class StartPage : ContentPage
 
     private List<CarInfo> _cars = new List<CarInfo>();
     private int _currentCarIndex = 0;
+    private bool _isMuted = false;
 
     // Audio players
     private IAudioPlayer _buttonClickSound;
     private IAudioPlayer _carSwitchSound;
     private IAudioPlayer _startGameSound;
-    private IAudioPlayer _backgroundMusic; // Added for background music
+    private IAudioPlayer _backgroundMusic;
 
     public StartPage()
     {
         InitializeComponent();
         InitializeCars();
+
+        // Load mute state
+        _isMuted = Preferences.Get(IsMutedKey, false);
+
         LoadSounds();
+        UpdateMuteButton();
     }
 
     /// <summary>
@@ -62,13 +69,13 @@ public partial class StartPage : ContentPage
             _backgroundMusic = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("menu_theme.mp3"));
 
             // Setup volume and loop
-            if (_buttonClickSound != null) _buttonClickSound.Volume = 0.5;
-            if (_carSwitchSound != null) _carSwitchSound.Volume = 0.5;
-            if (_startGameSound != null) _startGameSound.Volume = 0.7;
+            if (_buttonClickSound != null) _buttonClickSound.Volume = _isMuted ? 0 : 0.5;
+            if (_carSwitchSound != null) _carSwitchSound.Volume = _isMuted ? 0 : 0.5;
+            if (_startGameSound != null) _startGameSound.Volume = _isMuted ? 0 : 0.7;
 
             if (_backgroundMusic != null)
             {
-                _backgroundMusic.Volume = 0.4;
+                _backgroundMusic.Volume = _isMuted ? 0 : 0.4;
                 _backgroundMusic.Loop = true;
                 _backgroundMusic.Play(); // Start playing on load
             }
@@ -81,7 +88,7 @@ public partial class StartPage : ContentPage
 
     private void PlaySound(IAudioPlayer player)
     {
-        if (player != null)
+        if (player != null && !_isMuted)
         {
             if (player.IsPlaying) player.Stop();
             player.Play();
@@ -127,7 +134,7 @@ public partial class StartPage : ContentPage
         UpdateCarDisplay();
 
         // Resume background music when returning from other pages
-        if (_backgroundMusic != null && !_backgroundMusic.IsPlaying)
+        if (_backgroundMusic != null && !_backgroundMusic.IsPlaying && !_isMuted)
         {
             _backgroundMusic.Play();
         }
@@ -164,6 +171,28 @@ public partial class StartPage : ContentPage
         NextCarButton.IsEnabled = _currentCarIndex < _cars.Count - 1;
         PrevCarButton.Opacity = PrevCarButton.IsEnabled ? 1.0 : 0.5;
         NextCarButton.Opacity = NextCarButton.IsEnabled ? 1.0 : 0.5;
+    }
+
+    private void UpdateMuteButton()
+    {
+        MuteButton.Text = _isMuted ? "🔇" : "🔊";
+
+        // Update all audio players volume
+        if (_buttonClickSound != null) _buttonClickSound.Volume = _isMuted ? 0 : 0.5;
+        if (_carSwitchSound != null) _carSwitchSound.Volume = _isMuted ? 0 : 0.5;
+        if (_startGameSound != null) _startGameSound.Volume = _isMuted ? 0 : 0.7;
+        if (_backgroundMusic != null)
+        {
+            _backgroundMusic.Volume = _isMuted ? 0 : 0.4;
+            if (_isMuted && _backgroundMusic.IsPlaying)
+            {
+                _backgroundMusic.Stop();
+            }
+            else if (!_isMuted && !_backgroundMusic.IsPlaying)
+            {
+                _backgroundMusic.Play();
+            }
+        }
     }
 
     private async void OnPrevCarClicked(object sender, EventArgs e)
@@ -217,18 +246,13 @@ public partial class StartPage : ContentPage
     private async void OnUpgradesClicked(object sender, EventArgs e)
     {
         PlaySound(_buttonClickSound);
-
-        // STOP MUSIC before switching to UpgradePage
         StopBackgroundMusic();
-
         await Navigation.PushAsync(new UpgradePage());
     }
 
     private async void OnStartClicked(object sender, EventArgs e)
     {
         PlaySound(_startGameSound);
-
-        // STOP MUSIC before starting the game
         StopBackgroundMusic();
 
         Preferences.Set(GamesPlayedKey, Preferences.Get(GamesPlayedKey, 0) + 1);
@@ -255,5 +279,57 @@ public partial class StartPage : ContentPage
         };
 
         return (selectedIndex >= 0 && selectedIndex < cars.Count) ? cars[selectedIndex] : cars[0];
+    }
+
+    private void OnMuteClicked(object sender, EventArgs e)
+    {
+        _isMuted = !_isMuted;
+        Preferences.Set(IsMutedKey, _isMuted);
+        UpdateMuteButton();
+
+        try
+        {
+            HapticFeedback.Default.Perform(HapticFeedbackType.Click);
+        }
+        catch { /* Ignore if haptic feedback is not supported */ }
+    }
+
+    private async void OnResetClicked(object sender, EventArgs e)
+    {
+        bool confirmed = await DisplayAlert(
+            "Reset Progress",
+            "Are you sure you want to reset all progress? This will delete all coins, high score, and custom skins.",
+            "Yes, Reset",
+            "Cancel"
+        );
+
+        if (confirmed)
+        {
+            Preferences.Clear();
+
+            string customSkinPath = FileSystem.AppDataDirectory + "/custom_car.png";
+            if (File.Exists(customSkinPath))
+            {
+                try { File.Delete(customSkinPath); }
+                catch { }
+            }
+
+            _isMuted = false;
+            UpdateMuteButton();
+
+            _currentCarIndex = 0;
+
+            InitializeCars();
+            LoadAndDisplayStats();
+            UpdateCarDisplay();
+
+            await DisplayAlert("Reset Complete", "All progress has been reset.", "OK");
+
+            try
+            {
+                HapticFeedback.Default.Perform(HapticFeedbackType.LongPress);
+            }
+            catch { }
+        }
     }
 }
