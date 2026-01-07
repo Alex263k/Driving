@@ -47,9 +47,15 @@ public partial class GamePage : ContentPage
         _gameDrawable = new GameDrawable(_gameState, _selectedCar);
         GameCanvas.Drawable = _gameDrawable;
 
+        // Initialize the game loop at ~60 FPS
         _gameLoop = Dispatcher.CreateTimer();
         _gameLoop.Interval = TimeSpan.FromMilliseconds(16);
         _gameLoop.Tick += GameLoop_Tick;
+
+        // Add a Tap Gesture to handle "Tap to Exit" after Game Over
+        var tapGesture = new TapGestureRecognizer();
+        tapGesture.Tapped += OnCanvasTapped;
+        GameCanvas.GestureRecognizers.Add(tapGesture);
     }
 
     protected override async void OnAppearing()
@@ -72,12 +78,12 @@ public partial class GamePage : ContentPage
 
         try
         {
-            // Прямая загрузка Engine.wav для фона
+            // Load engine background sound
             _backgroundMusic = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("Engine.wav"));
             _backgroundMusic.Loop = true;
             _backgroundMusic.Volume = 0.5;
 
-            // Загрузка остальных эффектов
+            // Load SFX
             _collectSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("coin_collect.wav"));
             _gameOverSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("game_over.wav"));
             _powerUpSound = AudioManager.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("upgrade_success.wav"));
@@ -113,7 +119,6 @@ public partial class GamePage : ContentPage
 
         ApplyFuelUpgrades();
 
-        // Запуск фонового звука двигателя
         if (_backgroundMusic != null)
         {
             _backgroundMusic.Play();
@@ -131,8 +136,11 @@ public partial class GamePage : ContentPage
 
         UpdateGameSpeed();
         UpdatePlayerAnimation();
+
+        // Update score based on multiplier
         _gameState.Score += _gameState.ScoreMultiplier;
 
+        // Road animation logic
         _gameState.RoadMarkingOffset += _gameState.Speed / 2f;
         if (_gameState.RoadMarkingOffset > 60) _gameState.RoadMarkingOffset -= 60;
 
@@ -140,6 +148,8 @@ public partial class GamePage : ContentPage
         if (_gameState.InvulnerabilityFrames > 0) _gameState.InvulnerabilityFrames--;
 
         UpdateEntities();
+
+        // Redraw the UI
         GameCanvas.Invalidate();
     }
 
@@ -174,7 +184,7 @@ public partial class GamePage : ContentPage
 
     private void UpdateEntities()
     {
-        // Спавн врагов
+        // Enemy Spawning
         if (++_gameState.EnemySpawnCounter >= GameState.EnemySpawnRate)
         {
             int lane = _random.Next(0, 3);
@@ -182,7 +192,7 @@ public partial class GamePage : ContentPage
             _gameState.EnemySpawnCounter = 0;
         }
 
-        // Обновление врагов и коллизии
+        // Enemy Update & Collision
         for (int i = _gameState.Enemies.Count - 1; i >= 0; i--)
         {
             var enemy = _gameState.Enemies[i];
@@ -203,7 +213,7 @@ public partial class GamePage : ContentPage
             if (enemy.Y > _gameState.ScreenHeight) _gameState.Enemies.RemoveAt(i);
         }
 
-        // Монетки
+        // Coins Spawning
         if (++_gameState.CollectibleSpawnCounter >= GameState.CollectibleSpawnRate)
         {
             _gameState.Collectibles.Add(new Collectible(40, 40, _random.Next(0, 3)));
@@ -225,7 +235,7 @@ public partial class GamePage : ContentPage
             else if (coin.Y > _gameState.ScreenHeight) _gameState.Collectibles.RemoveAt(i);
         }
 
-        // Бонусы
+        // Bonuses Spawning
         if (++_gameState.BonusSpawnCounter >= GameState.BonusSpawnRate)
         {
             _gameState.Bonuses.Add(new Bonus(50, 50, _random.Next(0, 3), GetRandomBonusType()));
@@ -248,21 +258,17 @@ public partial class GamePage : ContentPage
 
     private void UpdateFuelSystem()
     {
-        // Используем динамический интервал из _gameState вместо старой константы
+        // Use time-based fuel consumption
         _gameState.FuelTimer += 0.016f;
 
-        // ОШИБКА БЫЛА ТУТ: заменяем GameState.FuelConsumptionInterval на _gameState.CurrentFuelConsumptionInterval
         while (_gameState.FuelTimer >= _gameState.CurrentFuelConsumptionInterval)
         {
-            // Увеличиваем расход: вычитаем больше топлива за один тик
-            // Если расход все еще медленный, замените 1.0f на 2.0f или 3.0f
+            // Reduce fuel
             _gameState.Player.CurrentFuel -= 1.5f;
-
-            // Сбрасываем таймер на величину интервала
             _gameState.FuelTimer -= _gameState.CurrentFuelConsumptionInterval;
         }
 
-        // Проверка на пустой бак
+        // Check for empty tank
         if (_gameState.Player.CurrentFuel <= 0)
         {
             _gameState.Player.CurrentFuel = 0;
@@ -270,14 +276,14 @@ public partial class GamePage : ContentPage
             return;
         }
 
-        // Спавн канистр
+        // Fuel Can Spawning
         if (++_gameState.FuelCanSpawnCounter >= GameState.FuelCanSpawnRate)
         {
             _gameState.FuelCans.Add(new FuelCan(40, 60, _random.Next(0, 3)));
             _gameState.FuelCanSpawnCounter = 0;
         }
 
-        // Движение и сбор канистр
+        // Fuel Collection
         for (int i = _gameState.FuelCans.Count - 1; i >= 0; i--)
         {
             var fuel = _gameState.FuelCans[i];
@@ -285,7 +291,6 @@ public partial class GamePage : ContentPage
 
             if (CheckFuelCanCollection(fuel, _gameState.Player))
             {
-                // Канистра дает 30 единиц, но не больше максимума бака
                 _gameState.Player.CurrentFuel = Math.Min(_gameState.Player.MaxFuel, _gameState.Player.CurrentFuel + 30f);
                 _collectSound?.Play();
                 _gameState.FuelCans.RemoveAt(i);
@@ -296,10 +301,11 @@ public partial class GamePage : ContentPage
             }
         }
     }
+
     private Enemy.EnemyType GetRandomEnemyType() => (Enemy.EnemyType)_random.Next(0, 4);
     private Bonus.BonusType GetRandomBonusType() => (Bonus.BonusType)_random.Next(0, 5);
 
-    private async void EndGame(string title)
+    private void EndGame(string title)
     {
         _gameState.IsRunning = false;
         _gameState.IsGameOver = true;
@@ -307,22 +313,33 @@ public partial class GamePage : ContentPage
         _backgroundMusic?.Stop();
         _gameOverSound?.Play();
 
+        // Save Highscore and Currency
         Preferences.Set("HighScore", Math.Max(Preferences.Get("HighScore", 0), _gameState.Score));
         Preferences.Set("TotalCoins", Preferences.Get("TotalCoins", 0) + _gameState.CoinsCollected);
 
-        await MainThread.InvokeOnMainThreadAsync(async () => {
-            await DisplayAlert(title, $"Score: {_gameState.Score}\nCoins: {_gameState.CoinsCollected}", "OK");
-            await Navigation.PopAsync();
-        });
+        // Force a final redraw to show the Game Over overlay (handled in GameDrawable)
+        GameCanvas.Invalidate();
+    }
+
+    private void OnCanvasTapped(object? sender, TappedEventArgs e)
+    {
+        // If the game is over, any tap on the screen returns the user to the previous page
+        if (_gameState.IsGameOver)
+        {
+            Navigation.PopAsync();
+        }
     }
 
     private void UpdatePlayerAnimation()
     {
         if (!_gameState.Player.IsAnimating) return;
+
         float progress = 1f - ((float)_gameState.Player.AnimationFramesRemaining / LaneChangeFrames);
         float eased = 0.5f - 0.5f * (float)Math.Cos(progress * Math.PI);
+
         _gameState.Player.VisualX = _gameState.Player.StartX + (_gameState.Player.TargetX - _gameState.Player.StartX) * eased;
         _gameState.Player.VisualY = (_gameState.ScreenHeight - 150) - (4 * progress * (1 - progress) * LeanAmountY);
+
         if (--_gameState.Player.AnimationFramesRemaining <= 0) _gameState.Player.IsAnimating = false;
     }
 
@@ -331,8 +348,10 @@ public partial class GamePage : ContentPage
         float pY = _gameState.ScreenHeight - 150;
         float pX = p.CalculateLaneX(_gameState.ScreenWidth);
         float eX = e.CalculateX(_gameState.ScreenWidth);
+
         if (pX < eX + e.Width && pX + p.Width > eX && pY < e.Y + e.Height && pY + p.Height > e.Y)
             return (e.Y + e.Height < pY + FrontalZoneDepth) ? CollisionResult.FrontalCollision : CollisionResult.SideCollision;
+
         return CollisionResult.None;
     }
 
@@ -348,23 +367,35 @@ public partial class GamePage : ContentPage
     {
         switch (type)
         {
-            case Bonus.BonusType.Shield: _gameState.IsShieldActive = true; _gameState.ShieldFrames = GameState.ShieldDuration; break;
-            case Bonus.BonusType.Magnet: _gameState.IsMagnetActive = true; _gameState.MagnetFrames = GameState.MagnetDuration; break;
-            case Bonus.BonusType.SlowMotion: _gameState.IsSlowMotionActive = true; _gameState.SlowMotionFrames = GameState.SlowMotionDuration; break;
-            case Bonus.BonusType.Multiplier: _gameState.IsMultiplierActive = true; _gameState.MultiplierFrames = GameState.MultiplierDuration; _gameState.ScoreMultiplier = 2; break;
+            case Bonus.BonusType.Shield:
+                _gameState.IsShieldActive = true;
+                _gameState.ShieldFrames = GameState.ShieldDuration;
+                break;
+            case Bonus.BonusType.Magnet:
+                _gameState.IsMagnetActive = true;
+                _gameState.MagnetFrames = GameState.MagnetDuration;
+                break;
+            case Bonus.BonusType.SlowMotion:
+                _gameState.IsSlowMotionActive = true;
+                _gameState.SlowMotionFrames = GameState.SlowMotionDuration;
+                break;
+            case Bonus.BonusType.Multiplier:
+                _gameState.IsMultiplierActive = true;
+                _gameState.MultiplierFrames = GameState.MultiplierDuration;
+                _gameState.ScoreMultiplier = 2;
+                break;
         }
     }
 
     private void OnSwiped(object? sender, SwipedEventArgs e)
     {
-        if (!_gameState.IsRunning || _gameState.Player.IsAnimating) return;
+        if (!_gameState.IsRunning || _gameState.Player.IsAnimating || _gameState.IsGameOver) return;
+
         int lane = _gameState.Player.CurrentLane;
         if (e.Direction == SwipeDirection.Left) lane--;
         else if (e.Direction == SwipeDirection.Right) lane++;
 
         if (lane < 0 || lane > 2) return;
-
-        // Звук перестроения удален по просьбе
 
         _gameState.Player.CurrentLane = lane;
         _gameState.Player.StartX = _gameState.Player.VisualX;

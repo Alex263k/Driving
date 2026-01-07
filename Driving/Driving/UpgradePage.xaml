@@ -2,33 +2,31 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="Driving.UpgradePage"
-             Title="Улучшения"
+             Title="Upgrades"
              BackgroundColor="Black"
              NavigationPage.HasNavigationBar="False">
 
     <ScrollView>
         <VerticalStackLayout Spacing="20" Padding="20">
 
-            <!-- Заголовок -->
             <Border BackgroundColor="#334155"
                     Stroke="#475569"
                     StrokeThickness="2"
                     StrokeShape="RoundRectangle 10"
                     Padding="20">
                 <VerticalStackLayout Spacing="10" HorizontalOptions="Center">
-                    <Label Text="⚙️ УЛУЧШЕНИЯ"
+                    <Label Text="⚙️ UPGRADES"
                            TextColor="White"
                            FontSize="28"
                            FontAttributes="Bold"
                            HorizontalTextAlignment="Center"/>
-                    <Label Text="Прокачайте свою машину!"
+                    <Label Text="Upgrade your car's performance!"
                            TextColor="#94a3b8"
                            FontSize="16"
                            HorizontalTextAlignment="Center"/>
                 </VerticalStackLayout>
             </Border>
 
-            <!-- Улучшение прочности -->
             <Border BackgroundColor="#1e293b"
                     Stroke="#334155"
                     StrokeThickness="2"
@@ -36,23 +34,21 @@
                     Padding="15">
                 <VerticalStackLayout Spacing="10">
 
-                    <!-- Заголовок улучшения -->
                     <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
                         <Label Text="❤️"
                                FontSize="24"
                                VerticalOptions="Center"/>
                         <VerticalStackLayout Spacing="2">
-                            <Label Text="ПРОЧНОСТЬ"
+                            <Label Text="DURABILITY"
                                    TextColor="White"
                                    FontSize="18"
                                    FontAttributes="Bold"/>
-                            <Label Text="Количество жизней в игре"
+                            <Label Text="Increases total health points"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                         </VerticalStackLayout>
                     </HorizontalStackLayout>
 
-                    <!-- Прогресс-бар -->
                     <Grid ColumnDefinitions="*,*,*,*,*,*,*,*,*,*"
                           ColumnSpacing="2"
                           HeightRequest="20">
@@ -68,10 +64,9 @@
                         <BoxView x:Name="DurabilitySegment10" Color="#4b5563" CornerRadius="3" Grid.Column="9"/>
                     </Grid>
 
-                    <!-- Уровень и цена -->
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                         <VerticalStackLayout Grid.Column="0" Spacing="2">
-                            <Label Text="Текущий уровень:"
+                            <Label Text="Current Level:"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                             <Label x:Name="DurabilityLevelLabel"
@@ -81,7 +76,7 @@
                                    FontAttributes="Bold"/>
                         </VerticalStackLayout>
                         <VerticalStackLayout Grid.Column="1" Spacing="2">
-                            <Label Text="Стоимость улучшения:"
+                            <Label Text="Upgrade Price:"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                             <Label x:Name="DurabilityPriceLabel"
@@ -92,9 +87,8 @@
                         </VerticalStackLayout>
                     </Grid>
 
-                    <!-- Кнопка улучшения -->
                     <Button x:Name="UpgradeDurabilityButton"
-                            Text="УЛУЧШИТЬ"
+                            Text="UPGRADE"
                             Clicked="OnUpgradeDurabilityClicked"
                             BackgroundColor="#10b981"
                             TextColor="White"
@@ -106,7 +100,6 @@
                 </VerticalStackLayout>
             </Border>
 
-            <!-- Улучшение скорости -->
             <Border BackgroundColor="#1e293b"
                     Stroke="#334155"
                     StrokeThickness="2"
@@ -114,23 +107,21 @@
                     Padding="15">
                 <VerticalStackLayout Spacing="10">
 
-                    <!-- Заголовок улучшения -->
                     <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
                         <Label Text="⚡"
                                FontSize="24"
                                VerticalOptions="Center"/>
                         <VerticalStackLayout Spacing="2">
-                            <Label Text="СКОРОСТЬ"
+                            <Label Text="SPEED"
                                    TextColor="White"
                                    FontSize="18"
                                    FontAttributes="Bold"/>
-                            <Label Text="Множитель скорости в игре"
+                            <Label Text="Increases maximum engine speed"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                         </VerticalStackLayout>
                     </HorizontalStackLayout>
 
-                    <!-- Прогресс-бар -->
                     <Grid ColumnDefinitions="*,*,*,*,*,*,*,*,*,*"
                           ColumnSpacing="2"
                           HeightRequest="20">
@@ -146,10 +137,9 @@
                         <BoxView x:Name="SpeedSegment10" Color="#4b5563" CornerRadius="3" Grid.Column="9"/>
                     </Grid>
 
-                    <!-- Уровень и цена -->
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                         <VerticalStackLayout Grid.Column="0" Spacing="2">
-                            <Label Text="Текущий уровень:"
+                            <Label Text="Current Level:"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                             <Label x:Name="SpeedLevelLabel"
@@ -159,7 +149,7 @@
                                    FontAttributes="Bold"/>
                         </VerticalStackLayout>
                         <VerticalStackLayout Grid.Column="1" Spacing="2">
-                            <Label Text="Стоимость улучшения:"
+                            <Label Text="Upgrade Price:"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                             <Label x:Name="SpeedPriceLabel"
@@ -170,9 +160,8 @@
                         </VerticalStackLayout>
                     </Grid>
 
-                    <!-- Кнопка улучшения -->
                     <Button x:Name="UpgradeSpeedButton"
-                            Text="УЛУЧШИТЬ"
+                            Text="UPGRADE"
                             Clicked="OnUpgradeSpeedClicked"
                             BackgroundColor="#10b981"
                             TextColor="White"
@@ -184,7 +173,6 @@
                 </VerticalStackLayout>
             </Border>
 
-            <!-- Улучшение топливного бака -->
             <Border BackgroundColor="#1e293b"
                     Stroke="#334155"
                     StrokeThickness="2"
@@ -192,23 +180,21 @@
                     Padding="15">
                 <VerticalStackLayout Spacing="10">
 
-                    <!-- Заголовок улучшения -->
                     <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
                         <Label Text="⛽"
                                FontSize="24"
                                VerticalOptions="Center"/>
                         <VerticalStackLayout Spacing="2">
-                            <Label Text="ТОПЛИВНЫЙ БАК"
+                            <Label Text="FUEL TANK"
                                    TextColor="White"
                                    FontSize="18"
                                    FontAttributes="Bold"/>
-                            <Label Text="Увеличивает максимальный запас топлива"
+                            <Label Text="Expand fuel storage capacity"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                         </VerticalStackLayout>
                     </HorizontalStackLayout>
 
-                    <!-- Прогресс-бар -->
                     <Grid ColumnDefinitions="*,*,*,*,*,*,*,*,*,*"
                           ColumnSpacing="2"
                           HeightRequest="20">
@@ -224,10 +210,9 @@
                         <BoxView x:Name="FuelTankSegment10" Color="#4b5563" CornerRadius="3" Grid.Column="9"/>
                     </Grid>
 
-                    <!-- Уровень и цена -->
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                         <VerticalStackLayout Grid.Column="0" Spacing="2">
-                            <Label Text="Текущий уровень:"
+                            <Label Text="Current Level:"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                             <Label x:Name="FuelTankLevelLabel"
@@ -237,7 +222,7 @@
                                    FontAttributes="Bold"/>
                         </VerticalStackLayout>
                         <VerticalStackLayout Grid.Column="1" Spacing="2">
-                            <Label Text="Стоимость улучшения:"
+                            <Label Text="Upgrade Price:"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                             <Label x:Name="FuelTankPriceLabel"
@@ -248,16 +233,14 @@
                         </VerticalStackLayout>
                     </Grid>
 
-                    <!-- Эффект -->
                     <Label x:Name="FuelTankEffectLabel"
-                           Text="Макс. топливо: 100L"
+                           Text="Max Fuel: 100L"
                            TextColor="LightGray"
                            FontSize="14"
                            HorizontalOptions="Center"/>
 
-                    <!-- Кнопка улучшения -->
                     <Button x:Name="FuelTankUpgradeButton"
-                            Text="УЛУЧШИТЬ"
+                            Text="UPGRADE"
                             Clicked="OnFuelTankUpgradeClicked"
                             BackgroundColor="#3b82f6"
                             TextColor="White"
@@ -269,7 +252,6 @@
                 </VerticalStackLayout>
             </Border>
 
-            <!-- Улучшение эффективности двигателя -->
             <Border BackgroundColor="#1e293b"
                     Stroke="#334155"
                     StrokeThickness="2"
@@ -277,23 +259,21 @@
                     Padding="15">
                 <VerticalStackLayout Spacing="10">
 
-                    <!-- Заголовок улучшения -->
                     <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
                         <Label Text="⚙️"
                                FontSize="24"
                                VerticalOptions="Center"/>
                         <VerticalStackLayout Spacing="2">
-                            <Label Text="ЭФФЕКТИВНОСТЬ ДВИГАТЕЛЯ"
+                            <Label Text="ENGINE EFFICIENCY"
                                    TextColor="White"
                                    FontSize="18"
                                    FontAttributes="Bold"/>
-                            <Label Text="Уменьшает расход топлива"
+                            <Label Text="Reduces fuel consumption rate"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                         </VerticalStackLayout>
                     </HorizontalStackLayout>
 
-                    <!-- Прогресс-бар -->
                     <Grid ColumnDefinitions="*,*,*,*,*,*,*,*,*,*"
                           ColumnSpacing="2"
                           HeightRequest="20">
@@ -309,10 +289,9 @@
                         <BoxView x:Name="EngineSegment10" Color="#4b5563" CornerRadius="3" Grid.Column="9"/>
                     </Grid>
 
-                    <!-- Уровень и цена -->
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                         <VerticalStackLayout Grid.Column="0" Spacing="2">
-                            <Label Text="Текущий уровень:"
+                            <Label Text="Current Level:"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                             <Label x:Name="EngineLevelLabel"
@@ -322,7 +301,7 @@
                                    FontAttributes="Bold"/>
                         </VerticalStackLayout>
                         <VerticalStackLayout Grid.Column="1" Spacing="2">
-                            <Label Text="Стоимость улучшения:"
+                            <Label Text="Upgrade Price:"
                                    TextColor="#94a3b8"
                                    FontSize="12"/>
                             <Label x:Name="EnginePriceLabel"
@@ -333,16 +312,14 @@
                         </VerticalStackLayout>
                     </Grid>
 
-                    <!-- Эффект -->
                     <Label x:Name="EngineEffectLabel"
-                           Text="Расход топлива: -0%"
+                           Text="Consumption: -0%"
                            TextColor="LightGray"
                            FontSize="14"
                            HorizontalOptions="Center"/>
 
-                    <!-- Кнопка улучшения -->
                     <Button x:Name="EngineUpgradeButton"
-                            Text="УЛУЧШИТЬ"
+                            Text="UPGRADE"
                             Clicked="OnEngineUpgradeClicked"
                             BackgroundColor="#3b82f6"
                             TextColor="White"
@@ -351,13 +328,11 @@
                             CornerRadius="22"
                             FontAttributes="Bold"/>
 
-
                 </VerticalStackLayout>
             </Border>
 
-            <!-- Кнопка назад -->
             <Button x:Name="BackButton"
-                    Text="← НАЗАД"
+                    Text="← BACK"
                     Clicked="OnBackClicked"
                     BackgroundColor="#64748b"
                     TextColor="White"

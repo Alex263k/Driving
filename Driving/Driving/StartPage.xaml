@@ -6,7 +6,6 @@
              NavigationPage.HasNavigationBar="False">
 
     <Grid>
-        <!-- Garage background -->
         <BoxView>
             <BoxView.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -17,20 +16,17 @@
             </BoxView.Background>
         </BoxView>
 
-        <!-- Main Content -->
         <Grid RowDefinitions="Auto,*,Auto" 
               Padding="20"
               RowSpacing="20">
 
-            <!-- Header with Stats -->
             <Border Grid.Row="0"
-                   BackgroundColor="#334155"
-                   Stroke="#475569"
-                   StrokeThickness="2"
-                   StrokeShape="RoundRectangle 10"
-                   Padding="15">
+                    BackgroundColor="#334155"
+                    Stroke="#475569"
+                    StrokeThickness="2"
+                    StrokeShape="RoundRectangle 10"
+                    Padding="15">
                 <Grid ColumnDefinitions="*,*,*" ColumnSpacing="20">
-                    <!-- Coins -->
                     <VerticalStackLayout Grid.Column="0" Spacing="2">
                         <Label Text="🪙" 
                                FontSize="24"
@@ -43,7 +39,6 @@
                                HorizontalTextAlignment="Center"/>
                     </VerticalStackLayout>
 
-                    <!-- High Score -->
                     <VerticalStackLayout Grid.Column="1" Spacing="2">
                         <Label Text="🏆" 
                                FontSize="24"
@@ -56,7 +51,6 @@
                                HorizontalTextAlignment="Center"/>
                     </VerticalStackLayout>
 
-                    <!-- Games Played -->
                     <VerticalStackLayout Grid.Column="2" Spacing="2">
                         <Label Text="🎮" 
                                FontSize="24"
@@ -71,13 +65,11 @@
                 </Grid>
             </Border>
 
-            <!-- Car Selection Area -->
             <Grid Grid.Row="1"
                   RowDefinitions="Auto,Auto,Auto,Auto"
                   RowSpacing="10"
                   VerticalOptions="Center">
 
-                <!-- Car Name -->
                 <Label Grid.Row="0"
                        x:Name="CarNameLabel"
                        Text="BASIC CAR"
@@ -87,23 +79,20 @@
                        HorizontalTextAlignment="Center"
                        Margin="0,0,0,20"/>
 
-                <!-- Car Display -->
                 <Border Grid.Row="1"
-                       BackgroundColor="#475569"
-                       Stroke="#64748b"
-                       StrokeThickness="2"
-                       StrokeShape="RoundRectangle 20"
-                       HeightRequest="180"
-                       WidthRequest="280"
-                       HorizontalOptions="Center"
-                       VerticalOptions="Center">
+                        BackgroundColor="#475569"
+                        Stroke="#64748b"
+                        StrokeThickness="2"
+                        StrokeShape="RoundRectangle 20"
+                        HeightRequest="180"
+                        WidthRequest="280"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center">
 
-                    <!-- Car with shadow effect -->
                     <Grid x:Name="CarDisplayGrid"
                           HorizontalOptions="Center"
                           VerticalOptions="Center">
 
-                        <!-- Car shadow -->
                         <BoxView Color="Black"
                                  Opacity="0.4"
                                  WidthRequest="120"
@@ -112,21 +101,18 @@
                                  TranslationY="8"
                                  TranslationX="6"/>
 
-                        <!-- Car body -->
                         <BoxView x:Name="CarBody"
                                  Color="LimeGreen"
                                  WidthRequest="120"
                                  HeightRequest="60"
                                  CornerRadius="12"/>
 
-                        <!-- Car windows -->
                         <BoxView Color="#e0f2fe"
                                  WidthRequest="60"
                                  HeightRequest="30"
                                  CornerRadius="6"
                                  TranslationY="-12"/>
 
-                        <!-- Wheels -->
                         <BoxView Color="#1e293b"
                                  WidthRequest="18"
                                  HeightRequest="18"
@@ -141,7 +127,6 @@
                                  TranslationY="25"
                                  TranslationX="35"/>
 
-                        <!-- Custom Image Preview -->
                         <Image x:Name="CustomCarImage"
                                WidthRequest="120"
                                HeightRequest="60"
@@ -150,10 +135,9 @@
                     </Grid>
                 </Border>
 
-                <!-- Upload Button for Custom Skin -->
                 <Button Grid.Row="2"
                         x:Name="UploadCustomButton"
-                        Text="📁 ЗАГРУЗИТЬ СВОЙ СКИН"
+                        Text="📁 UPLOAD CUSTOM SKIN"
                         Clicked="OnUploadCustomClicked"
                         BackgroundColor="#8b5cf6"
                         TextColor="White"
@@ -165,7 +149,6 @@
                         IsVisible="False"
                         Margin="0,10,0,0"/>
 
-                <!-- Car Navigation -->
                 <Grid Grid.Row="3"
                       ColumnDefinitions="*,Auto,*"
                       ColumnSpacing="20"
@@ -205,9 +188,7 @@
                 </Grid>
             </Grid>
 
-            <!-- Action Buttons -->
             <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="15">
-                <!-- Upgrades Button -->
                 <Button x:Name="UpgradesButton"
                         Grid.Column="0"
                         Text="⚡ UPGRADES"
@@ -219,7 +200,6 @@
                         CornerRadius="27" 
                         FontAttributes="Bold"/>
 
-                <!-- Start Game Button -->
                 <Button Grid.Column="1"
                         Text="🏁 START"
                         Clicked="OnStartClicked"

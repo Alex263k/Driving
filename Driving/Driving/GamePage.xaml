@@ -8,9 +8,12 @@
     <GraphicsView x:Name="GameCanvas" 
                   HorizontalOptions="Fill" 
                   VerticalOptions="Fill">
+
         <GraphicsView.GestureRecognizers>
             <SwipeGestureRecognizer Direction="Left" Swiped="OnSwiped" />
             <SwipeGestureRecognizer Direction="Right" Swiped="OnSwiped" />
         </GraphicsView.GestureRecognizers>
+
     </GraphicsView>
+
 </ContentPage>
